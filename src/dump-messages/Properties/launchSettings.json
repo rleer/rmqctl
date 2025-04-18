@@ -5,8 +5,7 @@
       "commandName": "Project",
       "commandLineArgs": "",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "MessageBroker__InstanceName": "error-queue-cleaner-local"
+        "ASPNETCORE_ENVIRONMENT": "Development"
       }
     }
   }
