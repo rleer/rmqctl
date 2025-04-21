@@ -40,7 +40,7 @@ public class RabbitChannelFactory : IRabbitChannelFactory
     
     private async Task<IChannel> GetChannelAsync(IConnection connection)
     {
-        _logger.LogInformation("Creating RabbitMQ channel...");
+        _logger.LogDebug("Creating RabbitMQ channel...");
         var channel = await connection.CreateChannelAsync();
         
         channel.BasicReturnAsync += (sender, @event) =>
@@ -57,7 +57,7 @@ public class RabbitChannelFactory : IRabbitChannelFactory
         if (_connection != null && _connection.IsOpen)
             return _connection;
 
-        _logger.LogInformation("Connecting to RabbitMQ on {Host}:{Port}...", _config.Host, _config.Port);
+        _logger.LogDebug("Connecting to RabbitMQ on {Host}:{Port}...", _config.Host, _config.Port);
         _connection = await _connectionFactory.CreateConnectionAsync();
 
         // Set up connection shutdown event handler
