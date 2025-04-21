@@ -3,14 +3,14 @@
   "profiles": {
     "rmqctl-dev-publish": {
       "commandName": "Project",
-      "commandLineArgs": "publish -q test-queue -m test-message",
+      "commandLineArgs": "publish -q test-queue -m test-message3",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }
     },
     "rmqctl-dev-consume": {
       "commandName": "Project",
-      "commandLineArgs": "consume -q test-queue -a reject",
+      "commandLineArgs": "consume -q test-queue -c 2",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }

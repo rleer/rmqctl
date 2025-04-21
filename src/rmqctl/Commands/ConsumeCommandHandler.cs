@@ -30,17 +30,23 @@ public class ConsumeCommandHandler : ICommandHandler
         ackModeOption.AddAlias("-a");
         ackModeOption.SetDefaultValue(AckModes.Ack);
         
+        var countOption = new Option<int>("--count", "Number of messages to consume (-1 for all messages)");
+        countOption.AddAlias("-c");
+        countOption.SetDefaultValue(-1);
+        
         consumeCommand.AddOption(queueOption);
         consumeCommand.AddOption(ackModeOption);
+        consumeCommand.AddOption(countOption);
         
-        consumeCommand.SetHandler(Handle, queueOption, ackModeOption);
+        consumeCommand.SetHandler(Handle, queueOption, ackModeOption, countOption);
 
         rootCommand.AddCommand(consumeCommand);
     }
 
-    private async Task Handle(string queue, AckModes ackMode)
+    private async Task Handle(string queue, AckModes ackMode, int messageCount)
     {
-        _logger.LogInformation("Consume messages from '{Queue}' queue in '{AckMode}' mode", queue, ackMode);
-        await _consumeService.ConsumeMessages(queue, ackMode);
+        _logger.LogInformation("Consume {Count} messages from '{Queue}' queue in '{AckMode}' mode",
+            messageCount == -1 ? "all" : messageCount.ToString(),queue, ackMode);
+        await _consumeService.ConsumeMessages(queue, ackMode, messageCount);
     }
 }
