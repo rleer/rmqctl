@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
+using rmqctl.Configuration;
 using rmqctl.Models;
 
 namespace rmqctl.Services;
@@ -7,27 +9,24 @@ namespace rmqctl.Services;
 public interface IConsumeService
 {
     Task ConsumeMessages(string queue, AckModes ackMode, int messageCount = -1);
+    Task DumpMessageToFile(string queue, AckModes ackMode, FileInfo outputFileInfo, int messageCount = -1);
 }
 
 public class ConsumeService : IConsumeService
 {
     private readonly ILogger<ConsumeService> _logger;
     private readonly IRabbitChannelFactory _rabbitChannelFactory;
+    private readonly FileConfig _fileConfig;
 
-    public ConsumeService(ILogger<ConsumeService> logger, IRabbitChannelFactory rabbitChannelFactory)
+    public ConsumeService(ILogger<ConsumeService> logger, IRabbitChannelFactory rabbitChannelFactory, IOptions<FileConfig> fileConfig)
     {
         _logger = logger;
         _rabbitChannelFactory = rabbitChannelFactory;
+        _fileConfig = fileConfig.Value;
     }
 
     public async Task ConsumeMessages(string queue, AckModes ackMode, int messageCount = -1)
     {
-        // Validate the input parameter
-        if (messageCount == 0)
-        {
-            _logger.LogWarning("Message count is 0. No messages will be consumed.");
-            return;
-        }
         _logger.LogInformation("Consume {Count} message(s) from '{Queue}' queue in '{AckMode}' mode",
             messageCount == -1 ? "all" : messageCount.ToString(), queue, ackMode);
 
@@ -36,6 +35,21 @@ public class ConsumeService : IConsumeService
         await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
         {
             _logger.LogInformation("{DeliveryTag}: {Message}", message.deliveryTag, message.body);
+        }
+    }
+
+    public async Task DumpMessageToFile(string queue, AckModes ackMode, FileInfo outputFileInfo, int messageCount = -1)
+    {
+        _logger.LogInformation("Dump {Count} message(s) from '{Queue}' queue in '{AckMode}' mode to '{OutputFile}'",
+            messageCount == -1 ? "all" : messageCount.ToString(), queue, ackMode, outputFileInfo.FullName);
+        
+        await using var channel = await _rabbitChannelFactory.GetChannelAsync();
+        await using var fileStream = outputFileInfo.Create();
+        await using var writer = new StreamWriter(fileStream);
+        
+        await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
+        {
+            await writer.WriteLineAsync($"{message.deliveryTag}: {message.body}");
         }
     }
 

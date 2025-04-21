@@ -1,16 +1,30 @@
 ﻿{
   "$schema": "http://json.schemastore.org/launchsettings.json",
   "profiles": {
-    "rmqctl-dev-publish": {
+    "dev-publish": {
       "commandName": "Project",
       "commandLineArgs": "publish -q test-queue -m test-message -b 10",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }
     },
-    "rmqctl-dev-consume": {
+    "dev-publish-from-file": {
+      "commandName": "Project",
+      "commandLineArgs": "publish -q test-queue --from-file ../../test/rmqctl.Test.Xunit/Files/single_line.txt",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    "dev-consume": {
       "commandName": "Project",
       "commandLineArgs": "consume -q test-queue -c 2",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    "dev-consume-to-file": {
+      "commandName": "Project",
+      "commandLineArgs": "consume -q test-queue --output /Users/richard.leer/workspace/backoffice/tools/rmqctl/src/rmqctl/output.txt",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }
