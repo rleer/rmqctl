@@ -42,72 +42,77 @@ public class ConsumeService : IConsumeService
     {
         _logger.LogInformation("Dump {Count} message(s) from '{Queue}' queue in '{AckMode}' mode to '{OutputFile}'",
             messageCount == -1 ? "all" : messageCount.ToString(), queue, ackMode, outputFileInfo.FullName);
-        
+
         await using var channel = await _rabbitChannelFactory.GetChannelAsync();
-        
+
         if (_fileConfig.MessagesPerFile <= messageCount)
         {
-            // If the number of messages to be dumped is less than or equal to the configured limit,
-            // write all messages to a single file without splitting.
-            await using var fileStream = outputFileInfo.OpenWrite();
-            await using var writer = new StreamWriter(fileStream);
-            await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
-            {
-                await writer.WriteLineAsync($"{message.deliveryTag}: {message.body}");
-                await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
-            } 
+            await WriteMessagesToSingleFile(channel, queue, ackMode, outputFileInfo, messageCount);
         }
         else
         {
-            // If the number of messages to be dumped exceeds the configured limit,
-            // split the messages into multiple files.
-            var fileIndex = 0;
-            var messagesInCurrentFile = 0;
-            var baseFileName = Path.Combine(
-                outputFileInfo.DirectoryName ?? string.Empty, 
-                Path.GetFileNameWithoutExtension(outputFileInfo.Name));
-            var fileExtension = outputFileInfo.Extension;
-        
-            FileStream? fileStream = null;
-            StreamWriter? writer = null; 
-            try
-            {
-                await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
-                {
-                    // Create new file if it's the first message, or if the current file is full
-                    if (writer is null || messagesInCurrentFile >= _fileConfig.MessagesPerFile)
-                    {
-                        if (writer is not null)
-                        {
-                            await writer.DisposeAsync();
-                            await fileStream!.DisposeAsync();
-                        }
-                        
-                        // baseFileName.0.txt, baseFileName.1.txt, etc.
-                        var currentFileName = $"{baseFileName}.{fileIndex}{fileExtension}";
-                        
-                        _logger.LogDebug("Creating new file: {FileName}", currentFileName);
-                        fileStream = new FileStream(currentFileName, FileMode.Create, FileAccess.Write);
-                        writer = new StreamWriter(fileStream);
-                        fileIndex++;
-                        messagesInCurrentFile = 0;
-                    }
-                    
-                    // Write the message to the current file
-                    await writer.WriteLineAsync($"{message.deliveryTag}: {message.body}");
-                    await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
-                    messagesInCurrentFile++;
-                }
-            }
-            finally
-            {
-                if (writer != null)
-                {
-                    await writer.DisposeAsync();
-                    await fileStream!.DisposeAsync(); 
-                }
-            } 
+            await WriteMessagesToMultipleFiles(channel, queue, ackMode, outputFileInfo, messageCount);
         }
+    }
+
+    private async Task WriteMessagesToSingleFile(IChannel channel, string queue, AckModes ackMode, FileInfo outputFileInfo, int messageCount)
+    {
+        await using var fileStream = outputFileInfo.OpenWrite();
+        await using var writer = new StreamWriter(fileStream);
+
+        await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
+        {
+            await writer.WriteLineAsync($"{message.deliveryTag}: {message.body}");
+            await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
+        }
+    }
+
+    private async Task WriteMessagesToMultipleFiles(IChannel channel, string queue, AckModes ackMode, FileInfo outputFileInfo, int messageCount)
+    {
+        var fileIndex = 0;
+        var messagesInCurrentFile = 0;
+        var baseFileName = Path.Combine(
+            outputFileInfo.DirectoryName ?? string.Empty,
+            Path.GetFileNameWithoutExtension(outputFileInfo.Name));
+        var fileExtension = outputFileInfo.Extension;
+
+        FileStream? fileStream = null;
+        StreamWriter? writer = null;
+
+        try
+        {
+            await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
+            {
+                if (writer is null || messagesInCurrentFile >= _fileConfig.MessagesPerFile)
+                {
+                    (fileStream, writer) = await CreateNewFile(baseFileName, fileExtension, fileIndex++);
+                    messagesInCurrentFile = 0;
+                }
+
+                await writer.WriteLineAsync($"{message.deliveryTag}: {message.body}");
+                await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
+                messagesInCurrentFile++;
+            }
+        }
+        finally
+        {
+            if (writer != null)
+            {
+                await writer.DisposeAsync();
+                await fileStream!.DisposeAsync();
+            }
+        }
+    }
+
+    private async Task<(FileStream fileStream, StreamWriter writer)> CreateNewFile(string baseFileName, string fileExtension, int fileIndex)
+    {
+        var currentFileName = $"{baseFileName}.{fileIndex}{fileExtension}";
+        _logger.LogDebug("Creating new file: {FileName}", currentFileName);
+
+        var fileStream = new FileStream(currentFileName, FileMode.Create, FileAccess.Write);
+        var writer = new StreamWriter(fileStream);
+
+        return (fileStream, writer);
     }
 
     private static async IAsyncEnumerable<(string body, ulong deliveryTag)> FetchMessagesAsync(IChannel channel, string queue, AckModes ackMode, int messageCount = -1)
