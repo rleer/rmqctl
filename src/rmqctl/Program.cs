@@ -11,6 +11,8 @@ var builder = Host.CreateApplicationBuilder();
 // Configure services
 builder.Services.Configure<RabbitMqConfig>(
     builder.Configuration.GetSection(nameof(RabbitMqConfig)));
+builder.Services.Configure<FileConfig>(
+    builder.Configuration.GetSection(nameof(FileConfig)));
 
 // Register services in the DI container
 builder.Services.AddSingleton<IRabbitChannelFactory, RabbitChannelFactory>();
