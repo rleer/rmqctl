@@ -1,11 +1,18 @@
 ﻿{
   "$schema": "http://json.schemastore.org/launchsettings.json",
   "profiles": {
-    "dump-messages": {
+    "rmqctl-dev-publish": {
       "commandName": "Project",
-      "commandLineArgs": "",
+      "commandLineArgs": "publish -q test-queue -m test-message",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    "rmqctl-dev-consume": {
+      "commandName": "Project",
+      "commandLineArgs": "consume -q test-queue -a reject",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
       }
     }
   }
