@@ -28,13 +28,23 @@ public class ConsumeService : IConsumeService
             _logger.LogWarning("Message count is 0. No messages will be consumed.");
             return;
         }
-        
+        _logger.LogInformation("Consume {Count} message(s) from '{Queue}' queue in '{AckMode}' mode",
+            messageCount == -1 ? "all" : messageCount.ToString(), queue, ackMode);
+
         await using var channel = await _rabbitChannelFactory.GetChannelAsync();
 
-        var processedCount = 0;
-        var continueConsuming = true;
+        await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
+        {
+            _logger.LogInformation("{DeliveryTag}: {Message}", message.deliveryTag, message.body);
+        }
+    }
 
-        while (continueConsuming && (messageCount == -1 || processedCount < messageCount))
+    private static async IAsyncEnumerable<(string body, ulong deliveryTag)> FetchMessagesAsync(IChannel channel, string queue, AckModes ackMode, int messageCount = -1)
+    {
+        var processedCount = 0;
+        var lastDeliveryTag = 0UL;
+
+        while (messageCount == -1 || processedCount < messageCount)
         {
             var result = ackMode switch
             {
@@ -45,29 +55,31 @@ public class ConsumeService : IConsumeService
 
             if (result != null)
             {
+                lastDeliveryTag = result.DeliveryTag;
                 var body = System.Text.Encoding.UTF8.GetString(result.Body.ToArray());
-                _logger.LogInformation("Received: {Message}", body);
 
+                yield return (body, result.DeliveryTag);
+
+                processedCount++;
+            }
+            else
+            {
+                // No more messages in the queue - reject or requeue all fetched messages
                 switch (ackMode)
                 {
                     case AckModes.Reject:
-                        await channel.BasicRejectAsync(result.DeliveryTag, requeue: false); 
+                        await channel.BasicNackAsync(lastDeliveryTag, true, false);
                         break;
                     case AckModes.Requeue:
-                        await channel.BasicRejectAsync(result.DeliveryTag, requeue: true);
+                        await channel.BasicNackAsync(lastDeliveryTag, true, true);
                         break;
                     case AckModes.Ack:
                         break;
                     default:
                         throw new ArgumentOutOfRangeException(nameof(ackMode), ackMode, null);
                 }
-                
-                processedCount++;
-            }
-            else
-            {
-                // No more messages in the queue
-                continueConsuming = false;
+
+                yield break;
             }
         }
     }

@@ -45,8 +45,7 @@ public class ConsumeCommandHandler : ICommandHandler
 
     private async Task Handle(string queue, AckModes ackMode, int messageCount)
     {
-        _logger.LogInformation("Consume {Count} messages from '{Queue}' queue in '{AckMode}' mode",
-            messageCount == -1 ? "all" : messageCount.ToString(),queue, ackMode);
+        _logger.LogDebug("Running handler for consume command...");
         await _consumeService.ConsumeMessages(queue, ackMode, messageCount);
     }
 }
