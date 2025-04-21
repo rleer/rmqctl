@@ -15,7 +15,7 @@ builder.Services.Configure<RabbitMqConfig>(
 // Register services in the DI container
 builder.Services.AddSingleton<IRabbitChannelFactory, RabbitChannelFactory>();
 builder.Services.AddSingleton<IPublishService, PublishService>();
-builder.Services.AddSingleton<IDumpService, DumpService>();
+builder.Services.AddSingleton<IConsumeService, ConsumeService>();
 
 // Register command handlers
 builder.Services.AddSingleton<ICommandHandler, PublishCommandHandler>();
