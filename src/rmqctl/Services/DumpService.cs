@@ -1,4 +1,4 @@
-namespace dump_messages.Services;
+namespace rmqctl.Services;
 
 public interface IDumpService
 {

@@ -1,7 +1,7 @@
 using System.CommandLine;
 using Microsoft.Extensions.Logging;
 
-namespace dump_messages.Commands;
+namespace rmqctl.Commands;
 
 public class ConsumeCommandHandler : ICommandHandler
 {

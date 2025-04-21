@@ -1,9 +1,9 @@
-using dump_messages.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
+using rmqctl.Configuration;
 
-namespace dump_messages.Services;
+namespace rmqctl.Services;
 
 public interface IRabbitChannelFactory
 {

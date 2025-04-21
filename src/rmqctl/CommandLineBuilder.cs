@@ -1,9 +1,9 @@
 using System.CommandLine;
-using dump_messages.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using rmqctl.Commands;
 
-namespace dump_messages;
+namespace rmqctl;
 
 public class CommandLineBuilder
 {

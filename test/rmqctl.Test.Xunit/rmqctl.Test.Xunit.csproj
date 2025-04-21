@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>dump_messages.Test.Xunit</RootNamespace>
+    <RootNamespace>rmqctl.Test.Xunit</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\dump-messages\dump-messages.csproj" />
+    <ProjectReference Include="..\..\src\rmqctl\rmqctl.csproj" />
   </ItemGroup>
 
 </Project>

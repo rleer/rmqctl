@@ -1,7 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.Binding;
 
-namespace dump_messages.Models;
+namespace rmqctl.Models;
 
 public class DestinationBinder : BinderBase<Destination>
 {

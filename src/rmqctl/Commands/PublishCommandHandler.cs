@@ -1,9 +1,9 @@
 using System.CommandLine;
-using dump_messages.Models;
-using dump_messages.Services;
 using Microsoft.Extensions.Logging;
+using rmqctl.Models;
+using rmqctl.Services;
 
-namespace dump_messages.Commands;
+namespace rmqctl.Commands;
 
 public class PublishCommandHandler : ICommandHandler
 {

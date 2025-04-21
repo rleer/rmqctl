@@ -1,4 +1,4 @@
-namespace dump_messages.Models;
+namespace rmqctl.Models;
 
 /// <summary>
 /// Represents a destination for messages in a message broker system.

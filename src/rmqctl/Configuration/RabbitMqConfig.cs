@@ -1,4 +1,4 @@
-namespace dump_messages.Configuration;
+namespace rmqctl.Configuration;
 
 public class RabbitMqConfig
 {

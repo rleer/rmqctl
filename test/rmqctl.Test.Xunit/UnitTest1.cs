@@ -1,4 +1,4 @@
-namespace dump_messages.Test.Xunit;
+namespace rmqctl.Test.Xunit;
 
 public class UnitTest1
 {

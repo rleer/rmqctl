@@ -1,6 +1,6 @@
 using System.CommandLine;
 
-namespace dump_messages.Commands;
+namespace rmqctl.Commands;
 
 /// <summary>
 /// Interface for command handlers

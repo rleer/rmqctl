@@ -1,9 +1,9 @@
-using dump_messages.Models;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
+using rmqctl.Models;
 
-namespace dump_messages.Services;
+namespace rmqctl.Services;
 
 public interface IPublishService
 {

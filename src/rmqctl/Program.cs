@@ -1,9 +1,9 @@
-﻿using dump_messages;
-using dump_messages.Commands;
-using dump_messages.Configuration;
-using dump_messages.Services;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using rmqctl;
+using rmqctl.Commands;
+using rmqctl.Configuration;
+using rmqctl.Services;
 
 
 var builder = Host.CreateApplicationBuilder();

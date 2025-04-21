@@ -1,6 +1,6 @@
 # rmqctl - RabbitMQ Control
 
-RabbitMQ Control is a command line tool for RabbitMQ.
+`rmqctl` is a command line tool for RabbitMQ.
 It allows you to publish messages to a queue and consume messages from a queue.
 It follows the pattern of tools like `kubectl`.
 
