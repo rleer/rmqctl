@@ -3,7 +3,7 @@
   "profiles": {
     "rmqctl-dev-publish": {
       "commandName": "Project",
-      "commandLineArgs": "publish -q test-queue -m test-message3",
+      "commandLineArgs": "publish -q test-queue -m test-message -b 10",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }

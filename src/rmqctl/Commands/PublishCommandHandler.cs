@@ -37,11 +37,16 @@ public class PublishCommandHandler : ICommandHandler
 
         var fromFileOption = new Option<string>("--from-file", "Path to a file that contains the message body to send");
 
+        var burstOption = new Option<int>("--burst", "Number of messages to send in burst mode");
+        burstOption.AddAlias("-b");
+        burstOption.SetDefaultValue(1);
+
         publishCommand.AddOption(queueOption);
         publishCommand.AddOption(exchangeOption);
         publishCommand.AddOption(routingKeyOption);
         publishCommand.AddOption(messageOption);
         publishCommand.AddOption(fromFileOption);
+        publishCommand.AddOption(burstOption);
 
         publishCommand.AddValidator(result =>
         {
@@ -64,23 +69,24 @@ public class PublishCommandHandler : ICommandHandler
             Handle,
             new DestinationBinder(queueOption, exchangeOption, routingKeyOption),
             messageOption,
-            fromFileOption
+            fromFileOption,
+            burstOption
         );
 
         rootCommand.AddCommand(publishCommand);
     }
 
-    private async Task Handle(Destination dest, string message, string filePath)
+    private async Task Handle(Destination dest, string message, string filePath, int burstCount)
     {
         _logger.LogDebug("Running handler for publish command...");
         if (!string.IsNullOrEmpty(filePath))
         {
             var fileInfo = new FileInfo(Path.GetFullPath(filePath, Environment.CurrentDirectory));
-            await _publishService.PublishMessageFromFile(dest, fileInfo);
+            await _publishService.PublishMessageFromFile(dest, fileInfo, burstCount);
         }
         else
         {
-            await _publishService.PublishMessage(dest, message);
+            await _publishService.PublishMessage(dest, message, burstCount);
         }
     }
 }

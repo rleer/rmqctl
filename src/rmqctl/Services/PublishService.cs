@@ -7,8 +7,8 @@ namespace rmqctl.Services;
 
 public interface IPublishService
 {
-    Task PublishMessage(Destination dest, string message);
-    Task PublishMessageFromFile(Destination dest, FileInfo fileInfo);
+    Task PublishMessage(Destination dest, string message, int burstCount = 1);
+    Task PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1);
 }
 
 public class PublishService : IPublishService
@@ -22,7 +22,7 @@ public class PublishService : IPublishService
         _logger = logger;
     }
 
-    public async Task PublishMessage(Destination dest, string message)
+    public async Task PublishMessage(Destination dest, string message, int burstCount = 1)
     {
         var body = System.Text.Encoding.UTF8.GetBytes(message);
 
@@ -30,11 +30,11 @@ public class PublishService : IPublishService
         {
             if (dest.Queue is not null)
             {
-                await PublishViaTempKey(dest.Queue, body, dest.Exchange);
+                await PublishViaTempKey(dest.Queue, body, dest.Exchange, burstCount);
             }
             else if (dest.Exchange is not null && dest.RoutingKey is not null)
             {
-                await PublishViaExchange(dest.RoutingKey, body, dest.Exchange);
+                await PublishViaExchange(dest.RoutingKey, body, dest.Exchange, burstCount);
             }
             else
             {
@@ -49,7 +49,7 @@ public class PublishService : IPublishService
         }
     }
 
-    public Task PublishMessageFromFile(Destination dest, FileInfo fileInfo)
+    public Task PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1)
     {
         if (!fileInfo.Exists)
         {
@@ -69,15 +69,16 @@ public class PublishService : IPublishService
         throw new ArgumentException($"File {fileInfo.FullName} is empty");
     }
 
-    private async Task PublishViaExchange(string routingKey, byte[] body, string exchange)
+    private async Task PublishViaExchange(string routingKey, byte[] body, string exchange, int burstCount = 1)
     {
         await using var channel = await _rabbitChannelFactory.GetChannelAsync();
-        _logger.LogInformation("Publishing message to {Exchange} with routing key {RoutingKey}", exchange, routingKey);
-
-        await channel.BasicPublishAsync(exchange, routingKey, true, body);
+        _logger.LogInformation("Publishing {Count} message(s) to {Exchange} with routing key {RoutingKey}", burstCount, exchange, routingKey);
+        
+        for (var i = 0; i < burstCount; i++)
+            await channel.BasicPublishAsync(exchange, routingKey, true, body);
     }
 
-    private async Task PublishViaTempKey(string queue, byte[] body, string? exchange)
+    private async Task PublishViaTempKey(string queue, byte[] body, string? exchange, int burstCount = 1)
     {
         await using var channel = await _rabbitChannelFactory.GetChannelAsync();
 
@@ -85,12 +86,13 @@ public class PublishService : IPublishService
         var routingKey = $"temp-key-{queue}";
 
         var destExchange = exchange ?? "amq.direct";
-        _logger.LogInformation("Publishing message to queue {Queue} via temporary routing key {RoutingKey} and exchange {Exchange}",
-            queue, routingKey, destExchange);
+        _logger.LogInformation("Publishing {Count} message(s) to queue {Queue} via temporary routing key {RoutingKey} and exchange {Exchange}",
+            burstCount, queue, routingKey, destExchange);
 
         await channel.QueueBindAsync(queue, destExchange, routingKey);
 
-        await channel.BasicPublishAsync(destExchange, routingKey, body);
+        for (var i = 0; i < burstCount; i++)
+            await channel.BasicPublishAsync(destExchange, routingKey, body);
 
         // Remove temporary binding after publishing
         await channel.QueueUnbindAsync(queue, destExchange, routingKey);
