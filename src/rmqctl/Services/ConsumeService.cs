@@ -85,7 +85,7 @@ public class ConsumeService : IConsumeService
             {
                 if (writer is null || messagesInCurrentFile >= _fileConfig.MessagesPerFile)
                 {
-                    (fileStream, writer) = await CreateNewFile(baseFileName, fileExtension, fileIndex++);
+                    (fileStream, writer) = CreateNewFile(baseFileName, fileExtension, fileIndex++);
                     messagesInCurrentFile = 0;
                 }
 
@@ -104,7 +104,7 @@ public class ConsumeService : IConsumeService
         }
     }
 
-    private async Task<(FileStream fileStream, StreamWriter writer)> CreateNewFile(string baseFileName, string fileExtension, int fileIndex)
+    private (FileStream fileStream, StreamWriter writer) CreateNewFile(string baseFileName, string fileExtension, int fileIndex)
     {
         var currentFileName = $"{baseFileName}.{fileIndex}{fileExtension}";
         _logger.LogDebug("Creating new file: {FileName}", currentFileName);
