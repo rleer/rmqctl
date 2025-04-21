@@ -74,7 +74,7 @@ public class ConsumeCommandHandler : ICommandHandler
         else
         {
             var outputFileInfo = new FileInfo(Path.GetFullPath(outputFilePath, Environment.CurrentDirectory));
-            await _consumeService.DumpMessageToFile(queue, ackMode, outputFileInfo, messageCount);
+            await _consumeService.DumpMessagesToFile(queue, ackMode, outputFileInfo, messageCount);
         }
     }
 }

@@ -24,7 +24,7 @@
     },
     "dev-consume-to-file": {
       "commandName": "Project",
-      "commandLineArgs": "consume -q test-queue --output /Users/richard.leer/workspace/backoffice/tools/rmqctl/src/rmqctl/output.txt",
+      "commandLineArgs": "consume -q test-queue --output output.txt",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }
