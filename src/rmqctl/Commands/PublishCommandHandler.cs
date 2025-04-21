@@ -2,6 +2,7 @@ using System.CommandLine;
 using Microsoft.Extensions.Logging;
 using rmqctl.Models;
 using rmqctl.Services;
+using rmqctl.Utilities;
 
 namespace rmqctl.Commands;
 
@@ -64,7 +65,12 @@ public class PublishCommandHandler : ICommandHandler
             {
                 result.ErrorMessage = "You cannot specify both a message and a file that contains the message body.";
             }
+            if (result.GetValueForOption(fromFileOption) is { } filePath && !PathValidator.IsValidFilePath(filePath))
+            {
+                result.ErrorMessage = $"The specified input file '{filePath}' is not valid.";
+            }
         });
+
         publishCommand.SetHandler(
             Handle,
             new DestinationBinder(queueOption, exchangeOption, routingKeyOption),
@@ -79,7 +85,7 @@ public class PublishCommandHandler : ICommandHandler
     private async Task Handle(Destination dest, string message, string filePath, int burstCount)
     {
         _logger.LogDebug("Running handler for publish command...");
-        if (!string.IsNullOrEmpty(filePath))
+        if (!string.IsNullOrWhiteSpace(filePath))
         {
             var fileInfo = new FileInfo(Path.GetFullPath(filePath, Environment.CurrentDirectory));
             await _publishService.PublishMessageFromFile(dest, fileInfo, burstCount);
