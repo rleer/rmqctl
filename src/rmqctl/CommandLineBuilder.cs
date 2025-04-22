@@ -16,6 +16,9 @@ public class CommandLineBuilder
                                          o(")(")
                                        """;
 
+    
+    public RootCommand RootCommand => _rootCommand;
+    
     public CommandLineBuilder(IHost host)
     {
         _host = host;
@@ -44,16 +47,10 @@ public class CommandLineBuilder
         var configFileOption = new Option<string>("--config", "Path to the configuration file");
         configFileOption.SetDefaultValue("appsettings.json");
         _rootCommand.AddGlobalOption(configFileOption);
-
-        // TODO: handle this option
-        var daemonOption = new Option<bool>("--daemon", "Run as a daemon");
-        daemonOption.SetDefaultValue(false);
-        daemonOption.AddAlias("-d");
-        _rootCommand.AddGlobalOption(daemonOption);
     }
 
-    public Task<int> RunAsync(string[] args)
+    public async Task<int> RunAsync(string[] args)
     {
-        return _rootCommand.InvokeAsync(args);
+        return await _rootCommand.InvokeAsync(args);
     }
 }

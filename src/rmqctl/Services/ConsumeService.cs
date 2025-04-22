@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 using rmqctl.Configuration;
 using rmqctl.Models;
 
@@ -10,6 +11,7 @@ public interface IConsumeService
 {
     Task ConsumeMessages(string queue, AckModes ackMode, int messageCount = -1);
     Task DumpMessagesToFile(string queue, AckModes ackMode, FileInfo outputFileInfo, int messageCount = -1);
+    Task StartContinuousConsumptionAsync(string queue, AckModes ackMode, int messageCount = -1, CancellationToken cancellationToken = default);
 }
 
 public class ConsumeService : IConsumeService
@@ -52,6 +54,73 @@ public class ConsumeService : IConsumeService
         else
         {
             await WriteMessagesToMultipleFiles(channel, queue, ackMode, outputFileInfo, messageCount);
+        }
+    }
+
+    public async Task StartContinuousConsumptionAsync(string queue, AckModes ackMode, int messageCount = -1, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Starting continuous consumption of messages from '{Queue}' queue in '{AckMode}' {StoppingCondition}",
+            queue, ackMode, messageCount == -1 ? "until stopped" : $"until {messageCount.ToString()} messages are consumed");
+        _logger.LogInformation("Press Ctrl+C to stop the consumption...");
+        
+        await using var channel = await _rabbitChannelFactory.GetChannelAsync();
+
+        var consumer = new AsyncEventingBasicConsumer(channel);
+
+        var processedCount = 0;
+        
+        // Register message received callback
+        consumer.ReceivedAsync += async (sender, @event) =>
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogDebug("Cancellation requested, not handling current event...");
+                return;
+            }
+            if (processedCount >= messageCount)
+            {
+                _logger.LogDebug("Message count reached, stopping consumption...");
+                return;
+            }
+            
+            var body = System.Text.Encoding.UTF8.GetString(@event.Body.ToArray());
+            _logger.LogInformation("{DeliveryTag}: {Body}", @event.DeliveryTag, body);
+            switch (ackMode)
+            {
+                case AckModes.Ack:
+                    await channel.BasicAckAsync(@event.DeliveryTag, false, cancellationToken);
+                    break;
+                case AckModes.Reject:
+                    await channel.BasicNackAsync(@event.DeliveryTag, false, false, cancellationToken);
+                    break;
+                case AckModes.Requeue:
+                    await channel.BasicNackAsync(@event.DeliveryTag, false, true, cancellationToken);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(ackMode), ackMode, null);
+            }
+
+            await Task.Delay(2000, cancellationToken);
+            processedCount++;
+        };
+        
+        // Register consumer shutdown callback
+        consumer.ShutdownAsync += (sender, @event) =>
+        {
+            _logger.LogWarning("Consumer shutdown: {Reason}", @event.ReplyText);
+            return Task.CompletedTask;
+        };
+
+        var consumerTag = await channel.BasicConsumeAsync(queue, false, consumer, cancellationToken);
+
+        try
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Cancellation requested, stopping consumer...");
+            await channel.BasicCancelAsync(consumerTag);
         }
     }
 
@@ -115,7 +184,8 @@ public class ConsumeService : IConsumeService
         return (fileStream, writer);
     }
 
-    private static async IAsyncEnumerable<(string body, ulong deliveryTag)> FetchMessagesAsync(IChannel channel, string queue, AckModes ackMode, int messageCount = -1)
+    private static async IAsyncEnumerable<(string body, ulong deliveryTag)> FetchMessagesAsync(IChannel channel, string queue, AckModes ackMode,
+        int messageCount = -1)
     {
         var processedCount = 0;
         var lastDeliveryTag = 0UL;
