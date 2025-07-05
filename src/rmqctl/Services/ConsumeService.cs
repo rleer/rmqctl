@@ -4,6 +4,7 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using rmqctl.Configuration;
 using rmqctl.Models;
+using rmqctl.Utilities;
 
 namespace rmqctl.Services;
 
@@ -36,7 +37,8 @@ public class ConsumeService : IConsumeService
 
         await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
         {
-            _logger.LogInformation("{DeliveryTag}: {Message}", message.deliveryTag, message.body);
+            _logger.LogInformation("DeliveryTag: {DeliveryTag}\nHeaders:{Properties}Message:\n{Message}", message.deliveryTag,
+                MessageFormater.FormatHeaders(message.props?.Headers), message.body);
         }
     }
 
@@ -131,7 +133,8 @@ public class ConsumeService : IConsumeService
 
         await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
         {
-            await writer.WriteLineAsync($"{message.deliveryTag}: {message.body}");
+            await writer.WriteLineAsync(
+                $"DeliveryTag: {message.deliveryTag}\nHeaders:{MessageFormater.FormatHeaders(message.props?.Headers)}Message:\n{message.body}");
             await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
         }
     }
@@ -158,7 +161,8 @@ public class ConsumeService : IConsumeService
                     messagesInCurrentFile = 0;
                 }
 
-                await writer.WriteLineAsync($"{message.deliveryTag}: {message.body}");
+                await writer.WriteLineAsync(
+                    $"DeliveryTag: {message.deliveryTag}\nHeaders:{MessageFormater.FormatHeaders(message.props?.Headers)}Message:\n{message.body}");
                 await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
                 messagesInCurrentFile++;
             }
