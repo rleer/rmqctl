@@ -157,6 +157,14 @@ public class ConsumeService : IConsumeService
             {
                 if (writer is null || messagesInCurrentFile >= _fileConfig.MessagesPerFile)
                 {
+                    // Dispose the previous writer and file stream if they exist
+                    if (writer is not null)
+                    {
+                        await writer.FlushAsync();
+                        await writer.DisposeAsync();
+                        await fileStream!.DisposeAsync();
+                    }
+
                     (fileStream, writer) = CreateNewFile(baseFileName, fileExtension, fileIndex++);
                     messagesInCurrentFile = 0;
                 }
