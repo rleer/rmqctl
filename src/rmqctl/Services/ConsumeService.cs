@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
@@ -69,52 +71,59 @@ public class ConsumeService : IConsumeService
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, countBasedCts.Token);
         var combinedToken = linkedCts.Token;
 
+        const ushort qos = 5;
         await using var channel = await _rabbitChannelFactory.GetChannelAsync();
-
+        await channel.BasicQosAsync(0, qos, false, combinedToken);
         var consumer = new AsyncEventingBasicConsumer(channel);
-
+        
         var processedCount = 0;
+        var messageCache = Channel.CreateUnbounded<RabbitMessage>();
 
         // Register message received callback
         consumer.ReceivedAsync += async (sender, @event) =>
         {
             if (combinedToken.IsCancellationRequested)
             {
-                _logger.LogDebug("Cancellation requested, not handling current event...");
-                await channel.BasicNackAsync(@event.DeliveryTag, false, true, combinedToken);
-                return;
-            }
-            if (processedCount >= messageCount)
-            {
-                await channel.BasicNackAsync(@event.DeliveryTag, false, true, combinedToken);
-
-                countBasedCts.Cancel();
+                messageCache.Writer.TryComplete();
                 return;
             }
 
-            var body = System.Text.Encoding.UTF8.GetString(@event.Body.ToArray());
-            _logger.LogInformation("{DeliveryTag}: {Body}", @event.DeliveryTag, body);
-            switch (ackMode)
-            {
-                case AckModes.Ack:
-                    await channel.BasicAckAsync(@event.DeliveryTag, false, combinedToken);
-                    break;
-                case AckModes.Reject:
-                    await channel.BasicNackAsync(@event.DeliveryTag, false, false, combinedToken);
-                    break;
-                case AckModes.Requeue:
-                    await channel.BasicNackAsync(@event.DeliveryTag, false, true, combinedToken);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(ackMode), ackMode, null);
-            }
-
-            await Task.Delay(1000, combinedToken);
+            var message = new RabbitMessage(
+                System.Text.Encoding.UTF8.GetString(@event.Body.ToArray()),
+                @event.DeliveryTag,
+                @event.BasicProperties
+            );
+            
+            _logger.LogDebug("Received message #{DeliveryTag}", message.DeliveryTag);
+            await messageCache.Writer.WriteAsync(message, combinedToken);
+            
+            // await Task.Delay(TimeSpan.FromSeconds(1), combinedToken);
             processedCount++;
-            if (messageCount == processedCount)
+            
+            if (processedCount % qos == 0 || messageCount == processedCount)
             {
-                _logger.LogDebug("Message count reached, stopping consumption...");
-                countBasedCts.Cancel();
+                _logger.LogDebug("Processed {ProcessedCount} messages, sending acknowledgment...", processedCount);
+                switch (ackMode)
+                {
+                    case AckModes.Ack:
+                        await channel.BasicAckAsync(@event.DeliveryTag, true, combinedToken);
+                        break;
+                    case AckModes.Reject:
+                        await channel.BasicNackAsync(@event.DeliveryTag, true, false, combinedToken);
+                        break;
+                    case AckModes.Requeue:
+                        await channel.BasicNackAsync(@event.DeliveryTag, true, true, combinedToken);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(ackMode), ackMode, null);
+                }
+
+                if (messageCount == processedCount)
+                {
+                    _logger.LogDebug("Message count reached, stopping consumption...");
+                    messageCache.Writer.TryComplete();
+                    await countBasedCts.CancelAsync();
+                }
             }
         };
 
@@ -127,6 +136,18 @@ public class ConsumeService : IConsumeService
 
         var consumerTag = await channel.BasicConsumeAsync(queue, false, consumer, combinedToken);
 
+        while (await messageCache.Reader.WaitToReadAsync())
+        {
+            while (messageCache.Reader.TryRead(out var message))
+            {
+                _logger.LogDebug("Processing cached message #{DeliveryTag}", message.DeliveryTag);
+                // Here you can process the cached message as needed
+                // For example, you could write it to a file or perform some other action
+                // await Task.Delay(TimeSpan.FromSeconds(2));
+            }
+        }
+        _logger.LogDebug("No more messages to read from cache");
+        
         try
         {
             await Task.Delay(Timeout.Infinite, combinedToken);
@@ -256,5 +277,26 @@ public class ConsumeService : IConsumeService
                 yield break;
             }
         }
+    }
+}
+
+public class RabbitMessage
+{
+    public string Body { get; set; }
+    public ulong DeliveryTag { get; set; }
+    public IReadOnlyBasicProperties? Props { get; set; }
+
+    public RabbitMessage(string body, ulong deliveryTag, IReadOnlyBasicProperties? props)
+    {
+        this.Body = body;
+        this.DeliveryTag = deliveryTag;
+        this.Props = props;
+    }
+
+    public override string ToString()
+    {
+        return "DeliveryTag: " + DeliveryTag + "\n" +
+               "Headers: " + MessageFormater.FormatHeaders(Props?.Headers) + "\n" +
+               "Message:\n" + Body;
     }
 }
