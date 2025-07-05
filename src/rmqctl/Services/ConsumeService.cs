@@ -64,7 +64,11 @@ public class ConsumeService : IConsumeService
         _logger.LogInformation("Starting continuous consumption of messages from '{Queue}' queue in '{AckMode}' {StoppingCondition}",
             queue, ackMode, messageCount == -1 ? "until stopped" : $"until {messageCount.ToString()} messages are consumed");
         _logger.LogInformation("Press Ctrl+C to stop the consumption...");
-        
+
+        using var countBasedCts = new CancellationTokenSource();
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, countBasedCts.Token);
+        var combinedToken = linkedCts.Token;
+
         await using var channel = await _rabbitChannelFactory.GetChannelAsync();
 
         var consumer = new AsyncEventingBasicConsumer(channel);
@@ -74,14 +78,17 @@ public class ConsumeService : IConsumeService
         // Register message received callback
         consumer.ReceivedAsync += async (sender, @event) =>
         {
-            if (cancellationToken.IsCancellationRequested)
+            if (combinedToken.IsCancellationRequested)
             {
                 _logger.LogDebug("Cancellation requested, not handling current event...");
+                await channel.BasicNackAsync(@event.DeliveryTag, false, true, combinedToken);
                 return;
             }
             if (processedCount >= messageCount)
             {
-                _logger.LogDebug("Message count reached, stopping consumption...");
+                await channel.BasicNackAsync(@event.DeliveryTag, false, true, combinedToken);
+
+                countBasedCts.Cancel();
                 return;
             }
 
@@ -90,20 +97,25 @@ public class ConsumeService : IConsumeService
             switch (ackMode)
             {
                 case AckModes.Ack:
-                    await channel.BasicAckAsync(@event.DeliveryTag, false, cancellationToken);
+                    await channel.BasicAckAsync(@event.DeliveryTag, false, combinedToken);
                     break;
                 case AckModes.Reject:
-                    await channel.BasicNackAsync(@event.DeliveryTag, false, false, cancellationToken);
+                    await channel.BasicNackAsync(@event.DeliveryTag, false, false, combinedToken);
                     break;
                 case AckModes.Requeue:
-                    await channel.BasicNackAsync(@event.DeliveryTag, false, true, cancellationToken);
+                    await channel.BasicNackAsync(@event.DeliveryTag, false, true, combinedToken);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(ackMode), ackMode, null);
             }
 
-            await Task.Delay(2000, cancellationToken);
+            await Task.Delay(1000, combinedToken);
             processedCount++;
+            if (messageCount == processedCount)
+            {
+                _logger.LogDebug("Message count reached, stopping consumption...");
+                countBasedCts.Cancel();
+            }
         };
 
         // Register consumer shutdown callback
@@ -113,11 +125,11 @@ public class ConsumeService : IConsumeService
             return Task.CompletedTask;
         };
 
-        var consumerTag = await channel.BasicConsumeAsync(queue, false, consumer, cancellationToken);
+        var consumerTag = await channel.BasicConsumeAsync(queue, false, consumer, combinedToken);
 
         try
         {
-            await Task.Delay(Timeout.Infinite, cancellationToken);
+            await Task.Delay(Timeout.Infinite, combinedToken);
         }
         catch (OperationCanceledException)
         {

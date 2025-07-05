@@ -9,12 +9,19 @@ public class ContinuousConsumerService : BackgroundService
     private readonly ILogger<ContinuousConsumerService> _logger;
     private readonly IConsumeService _consumeService;
     private readonly DaemonConfig _daemonConfig;
+    private readonly IHostApplicationLifetime _hostLifetime;
 
-    public ContinuousConsumerService(ILogger<ContinuousConsumerService> logger, IConsumeService consumeService, DaemonConfig daemonConfig)
+    public ContinuousConsumerService(
+        ILogger<ContinuousConsumerService> logger,
+        IConsumeService consumeService,
+        DaemonConfig daemonConfig,
+        IHostApplicationLifetime hostLifetime
+    )
     {
         _logger = logger;
         _consumeService = consumeService;
         _daemonConfig = daemonConfig;
+        _hostLifetime = hostLifetime;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -30,8 +37,19 @@ public class ContinuousConsumerService : BackgroundService
             _logger.LogWarning("Queue or acknowledge mode not provided to consume daemon. Exiting...");
             return;
         }
-        
-        await _consumeService.StartContinuousConsumptionAsync(_daemonConfig.Queue, _daemonConfig.AckMode.Value, _daemonConfig.MessageCount, stoppingToken); 
-        
+
+        await _consumeService.StartContinuousConsumptionAsync(
+            _daemonConfig.Queue,
+            _daemonConfig.AckMode.Value,
+            _daemonConfig.MessageCount,
+            stoppingToken
+        );
+
+        // If we reach here, it means processing has completed (likely due to message count)
+        if (_daemonConfig.MessageCount > 0)
+        {
+            _logger.LogInformation("Message count limit reached. Stopping the application...");
+            _hostLifetime.StopApplication();
+        }
     }
 }
