@@ -184,8 +184,12 @@ public class ConsumeService : IConsumeService
         return (fileStream, writer);
     }
 
-    private static async IAsyncEnumerable<(string body, ulong deliveryTag)> FetchMessagesAsync(IChannel channel, string queue, AckModes ackMode,
-        int messageCount = -1)
+    private static async IAsyncEnumerable<(string body, ulong deliveryTag, IReadOnlyBasicProperties? props)> FetchMessagesAsync(
+        IChannel channel,
+        string queue,
+        AckModes ackMode,
+        int messageCount = -1
+    )
     {
         var processedCount = 0;
         var lastDeliveryTag = 0UL;
@@ -204,7 +208,7 @@ public class ConsumeService : IConsumeService
                 lastDeliveryTag = result.DeliveryTag;
                 var body = System.Text.Encoding.UTF8.GetString(result.Body.ToArray());
 
-                yield return (body, result.DeliveryTag);
+                yield return (body, result.DeliveryTag, result.BasicProperties);
 
                 processedCount++;
             }
