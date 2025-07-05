@@ -47,7 +47,7 @@ public class ConsumeService : IConsumeService
 
         await using var channel = await _rabbitChannelFactory.GetChannelAsync();
 
-        if (_fileConfig.MessagesPerFile <= messageCount)
+        if (_fileConfig.MessagesPerFile >= messageCount)
         {
             await WriteMessagesToSingleFile(channel, queue, ackMode, outputFileInfo, messageCount);
         }
@@ -68,7 +68,7 @@ public class ConsumeService : IConsumeService
         var consumer = new AsyncEventingBasicConsumer(channel);
 
         var processedCount = 0;
-        
+
         // Register message received callback
         consumer.ReceivedAsync += async (sender, @event) =>
         {
@@ -82,7 +82,7 @@ public class ConsumeService : IConsumeService
                 _logger.LogDebug("Message count reached, stopping consumption...");
                 return;
             }
-            
+
             var body = System.Text.Encoding.UTF8.GetString(@event.Body.ToArray());
             _logger.LogInformation("{DeliveryTag}: {Body}", @event.DeliveryTag, body);
             switch (ackMode)
@@ -103,7 +103,7 @@ public class ConsumeService : IConsumeService
             await Task.Delay(2000, cancellationToken);
             processedCount++;
         };
-        
+
         // Register consumer shutdown callback
         consumer.ShutdownAsync += (sender, @event) =>
         {
