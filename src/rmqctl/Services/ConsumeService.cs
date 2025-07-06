@@ -63,100 +63,121 @@ public class ConsumeService : IConsumeService
 
     public async Task StartContinuousConsumptionAsync(string queue, AckModes ackMode, int messageCount = -1, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Starting continuous consumption of messages from '{Queue}' queue in '{AckMode}' {StoppingCondition}",
+        _logger.LogInformation("[*] Starting continuous consumption of messages from '{Queue}' queue in '{AckMode}' {StoppingCondition}",
             queue, ackMode, messageCount == -1 ? "until stopped" : $"until {messageCount.ToString()} messages are consumed");
-        _logger.LogInformation("Press Ctrl+C to stop the consumption...");
+        _logger.LogInformation("[*] Press Ctrl+C to stop the consumption...");
 
-        using var countBasedCts = new CancellationTokenSource();
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, countBasedCts.Token);
-        var combinedToken = linkedCts.Token;
+        // Create a local cancellation token source to allow stopping the consumption
+        var localCts = new CancellationTokenSource();
+        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, localCts.Token);
 
-        const ushort qos = 5;
         await using var channel = await _rabbitChannelFactory.GetChannelAsync();
-        await channel.BasicQosAsync(0, qos, false, combinedToken);
-        var consumer = new AsyncEventingBasicConsumer(channel);
-        
-        var processedCount = 0;
-        var messageCache = Channel.CreateUnbounded<RabbitMessage>();
 
-        // Register message received callback
-        consumer.ReceivedAsync += async (sender, @event) =>
+        await channel.BasicQosAsync(0, _rabbitChannelFactory.PrefetchCount, false, linkedCts.Token);
+
+        var receiveChan = Channel.CreateBounded<RabbitMessage>(_rabbitChannelFactory.PrefetchCount * 2);
+        var ackChan = Channel.CreateUnbounded<(ulong deliveryTag, AckModes ackMode)>();
+
+        // Hook up callback that completes the receive channel when message count is reached or cancellation is requested by user/applicaiton
+        linkedCts.Token.Register(() =>
         {
-            if (combinedToken.IsCancellationRequested)
+            _logger.LogDebug("[x] Completing receive channel (host: {ParentCt}, local: {LocalCt})",
+                cancellationToken.IsCancellationRequested, localCts.IsCancellationRequested);
+            receiveChan.Writer.TryComplete();
+        });
+
+        long receivedCount = 0;
+
+        var consumer = new AsyncEventingBasicConsumer(channel);
+        consumer.ReceivedAsync += async (_, ea) =>
+        {
+            if (linkedCts.Token.IsCancellationRequested)
             {
-                messageCache.Writer.TryComplete();
                 return;
             }
 
+            _logger.LogInformation("[m-receiver] Received message #{DeliveryTag}", ea.DeliveryTag);
             var message = new RabbitMessage(
-                System.Text.Encoding.UTF8.GetString(@event.Body.ToArray()),
-                @event.DeliveryTag,
-                @event.BasicProperties
+                System.Text.Encoding.UTF8.GetString(ea.Body.ToArray()),
+                ea.DeliveryTag,
+                ea.BasicProperties
             );
-            
-            _logger.LogDebug("Received message #{DeliveryTag}", message.DeliveryTag);
-            await messageCache.Writer.WriteAsync(message, combinedToken);
-            
-            // await Task.Delay(TimeSpan.FromSeconds(1), combinedToken);
-            processedCount++;
-            
-            if (processedCount % qos == 0 || messageCount == processedCount)
+
+            // Simulate some processing delay (e.g., for testing purposes)
+            // await Task.Delay(100);
+
+            await receiveChan.Writer.WriteAsync(message, linkedCts.Token);
+            _logger.LogDebug("[m-receiver] Message #{DeliveryTag} written to receive channel", ea.DeliveryTag);
+
+            // Check if we reached the message count limit
+            if (messageCount != -1 && Interlocked.Increment(ref receivedCount) == messageCount)
             {
-                _logger.LogDebug("Processed {ProcessedCount} messages, sending acknowledgment...", processedCount);
-                switch (ackMode)
+                _logger.LogDebug("[m-receiver] Message limit reached ({MessageCount}) - initiating cancellation!", messageCount);
+                await localCts.CancelAsync();
+            }
+        };
+
+        _logger.LogDebug("[*] Starting RabbitMQ consumer for queue '{Queue}'", queue);
+        _ = channel.BasicConsumeAsync(queue: queue, autoAck: false, consumer: consumer);
+
+        // Process received messages
+        var messageProcessor = Task.Run(async () =>
+        {
+            _logger.LogDebug("[m-proc] Starting message processing...");
+            await foreach (var message in receiveChan.Reader.ReadAllAsync())
+            {
+                try
+                {
+                    _logger.LogInformation("[m-proc] Start processing message #{DeliveryTag}...", message.DeliveryTag);
+
+                    // Simulate some processing delay (e.g., for testing purposes)
+                    // await Task.Delay(100);
+
+                    await ackChan.Writer.WriteAsync((message.DeliveryTag, ackMode));
+                    _logger.LogDebug("[m-proc] Message #{DeliveryTag} processed successfully", message.DeliveryTag);
+                }
+                catch (Exception)
+                {
+                    _logger.LogWarning("[m-proc] Message #{DeliveryTag} failed to process", message.DeliveryTag);
+                    await ackChan.Writer.WriteAsync((message.DeliveryTag, AckModes.Requeue));
+                }
+            }
+
+            ackChan.Writer.TryComplete();
+            _logger.LogDebug("[m-proc] Done!");
+        });
+
+        // Dispatcher for acknowledgments of successfully processed messages
+        // TODO: handle multiple acks in a single call
+        var ackDispatcher = Task.Run(async () =>
+        {
+            _logger.LogDebug("[ack-disp] Starting acknowledgment dispatcher...");
+            await foreach (var (deliveryTag, ackModeValue) in ackChan.Reader.ReadAllAsync())
+            {
+                switch (ackModeValue)
                 {
                     case AckModes.Ack:
-                        await channel.BasicAckAsync(@event.DeliveryTag, true, combinedToken);
+                        _logger.LogDebug("[ack-disp] Acknowledging message #{DeliveryTag}", deliveryTag);
+                        await channel.BasicAckAsync(deliveryTag, multiple: false);
                         break;
                     case AckModes.Reject:
-                        await channel.BasicNackAsync(@event.DeliveryTag, true, false, combinedToken);
+                        _logger.LogDebug("[ack-disp] Rejecting message #{DeliveryTag} without requeue", deliveryTag);
+                        await channel.BasicNackAsync(deliveryTag, multiple: false, requeue: false);
                         break;
                     case AckModes.Requeue:
-                        await channel.BasicNackAsync(@event.DeliveryTag, true, true, combinedToken);
+                        _logger.LogDebug("[ack-disp] Requeuing message #{DeliveryTag}", deliveryTag);
+                        await channel.BasicNackAsync(deliveryTag, multiple: false, requeue: true);
                         break;
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(ackMode), ackMode, null);
-                }
-
-                if (messageCount == processedCount)
-                {
-                    _logger.LogDebug("Message count reached, stopping consumption...");
-                    messageCache.Writer.TryComplete();
-                    await countBasedCts.CancelAsync();
                 }
             }
-        };
 
-        // Register consumer shutdown callback
-        consumer.ShutdownAsync += (sender, @event) =>
-        {
-            _logger.LogWarning("Consumer shutdown: {Reason}", @event.ReplyText);
-            return Task.CompletedTask;
-        };
+            _logger.LogDebug("[ack-disp] Done!");
+        });
 
-        var consumerTag = await channel.BasicConsumeAsync(queue, false, consumer, combinedToken);
+        await Task.WhenAll(messageProcessor, ackDispatcher);
 
-        while (await messageCache.Reader.WaitToReadAsync())
-        {
-            while (messageCache.Reader.TryRead(out var message))
-            {
-                _logger.LogDebug("Processing cached message #{DeliveryTag}", message.DeliveryTag);
-                // Here you can process the cached message as needed
-                // For example, you could write it to a file or perform some other action
-                // await Task.Delay(TimeSpan.FromSeconds(2));
-            }
-        }
-        _logger.LogDebug("No more messages to read from cache");
-        
-        try
-        {
-            await Task.Delay(Timeout.Infinite, combinedToken);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("Cancellation requested, stopping consumer...");
-            await channel.BasicCancelAsync(consumerTag);
-        }
+        _logger.LogDebug("[x] Continuous consumption stopped. Waiting for RabbitMQ channel to close...");
+        await channel.CloseAsync();
     }
 
     private async Task WriteMessagesToSingleFile(IChannel channel, string queue, AckModes ackMode, FileInfo outputFileInfo, int messageCount)

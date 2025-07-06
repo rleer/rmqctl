@@ -45,11 +45,12 @@ public class ContinuousConsumerService : BackgroundService
             stoppingToken
         );
 
-        // If we reach here, it means processing has completed (likely due to message count)
-        if (_daemonConfig.MessageCount > 0)
-        {
-            _logger.LogInformation("Message count limit reached. Stopping the application...");
-            _hostLifetime.StopApplication();
-        }
+        _logger.LogDebug("[x] Message consumer is done (cts: {CancellationToken}). Stopping application...", stoppingToken.IsCancellationRequested);
+        _hostLifetime.StopApplication();
+    }
+    public override Task StopAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Stop Async cts: {CancellationToken}", cancellationToken.IsCancellationRequested);
+        return base.StopAsync(cancellationToken);
     }
 }

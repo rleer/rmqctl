@@ -8,6 +8,7 @@ namespace rmqctl.Services;
 public interface IRabbitChannelFactory
 {
     Task<IChannel> GetChannelAsync();
+    ushort PrefetchCount { get; }
 }
 
 public class RabbitChannelFactory : IRabbitChannelFactory
@@ -16,6 +17,7 @@ public class RabbitChannelFactory : IRabbitChannelFactory
     private readonly ILogger<RabbitChannelFactory> _logger;
     private readonly ConnectionFactory _connectionFactory;
     private IConnection? _connection;
+    public ushort PrefetchCount { get; set; }
 
     public RabbitChannelFactory(IOptions<RabbitMqConfig> options, ILogger<RabbitChannelFactory> logger)
     {
@@ -30,6 +32,7 @@ public class RabbitChannelFactory : IRabbitChannelFactory
             VirtualHost = _config.VirtualHost,
             ClientProvidedName = _config.ClientName
         };
+        PrefetchCount = _config.PrefetchCount;
     }
 
     public async Task<IChannel> GetChannelAsync()
@@ -37,18 +40,19 @@ public class RabbitChannelFactory : IRabbitChannelFactory
         var connection = await GetConnectionAsync();
         return await GetChannelAsync(connection);
     }
-    
+
+    // TODO: Pass cancellation token
     private async Task<IChannel> GetChannelAsync(IConnection connection)
     {
         _logger.LogDebug("Creating RabbitMQ channel...");
         var channel = await connection.CreateChannelAsync();
-        
+
         channel.BasicReturnAsync += (sender, @event) =>
         {
             _logger.LogWarning("Message returned: {ReplyCode} - {ReplyText}", @event.ReplyCode, @event.ReplyText);
             return Task.CompletedTask;
         };
-        
+
         return channel;
     }
 

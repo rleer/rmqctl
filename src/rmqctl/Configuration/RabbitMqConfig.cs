@@ -9,4 +9,5 @@ public class RabbitMqConfig
     public required string Password { get; set; }
     public required string Exchange { get; set; }
     public required string ClientName { get; set; }
+    public required ushort PrefetchCount { get; set; }
 }
