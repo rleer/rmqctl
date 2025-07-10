@@ -5,7 +5,7 @@ namespace rmqctl.Utilities;
 
 public static class MessageFormater
 {
-    public static string FormatBasicProperties(ReadOnlyBasicProperties? messageProps)
+    public static string FormatBasicProperties(IReadOnlyBasicProperties? messageProps)
     {
         if (messageProps is null)
         {
@@ -13,45 +13,43 @@ public static class MessageFormater
         }
 
         var sb = new StringBuilder();
-        
-        // Add all standard properties
-        // sb.AppendLine($"  ContentType: {messageProps.ContentType ?? "null"}");
-        // sb.AppendLine($"  ContentEncoding: {messageProps.ContentEncoding ?? "null"}");
-        // sb.AppendLine($"  DeliveryMode: {messageProps.DeliveryMode}");;
-        // sb.AppendLine($"  Priority: {messageProps.Priority}");
-        // sb.AppendLine($"  CorrelationId: {messageProps?.CorrelationId ?? "null"}");
-        // sb.AppendLine($"  ReplyTo: {messageProps?.ReplyTo ?? "null"}");
-        // sb.AppendLine($"  Expiration: {messageProps?.Expiration ?? "null"}");
-        // sb.AppendLine($"  MessageId: {messageProps?.MessageId ?? "null"}");
-
-        // Format timestamp as readable datetime if available
-        if (messageProps?.Timestamp.UnixTime > 0)
+       
+        if (messageProps.IsTypePresent())
+            sb.AppendLine($"Type: {messageProps.Type}");
+        if (messageProps.IsMessageIdPresent())
+            sb.AppendLine($"MessageId: {messageProps.MessageId}");
+        if (messageProps.IsAppIdPresent())
+            sb.AppendLine($"AppId: {messageProps.AppId}");
+        if (messageProps.IsClusterIdPresent())
+            sb.AppendLine($"ClusterId: {messageProps.ClusterId}");
+        if (messageProps.IsContentTypePresent())
+            sb.AppendLine($"ContentType: {messageProps.ContentType}");
+        if (messageProps.IsContentEncodingPresent())
+            sb.AppendLine($"ContentEncoding: {messageProps.ContentEncoding}");
+        if (messageProps.IsCorrelationIdPresent())
+            sb.AppendLine($"CorrelationId: {messageProps.CorrelationId}");
+        if (messageProps.IsDeliveryModePresent())
+            sb.AppendLine($"DeliveryMode: {messageProps.DeliveryMode}");
+        if (messageProps.IsExpirationPresent())
+            sb.AppendLine($"Expiration: {messageProps.Expiration}");
+        if (messageProps.IsPriorityPresent())
+            sb.AppendLine($"Priority: {messageProps.Priority}");
+        if (messageProps.IsReplyToPresent())
+            sb.AppendLine($"ReplyTo: {messageProps.ReplyTo}");
+        if (messageProps.IsTimestampPresent())
         {
             var timestamp = DateTimeOffset.FromUnixTimeSeconds(messageProps.Timestamp.UnixTime);
-            sb.AppendLine($"  Timestamp: {timestamp:yyyy-MM-dd HH:mm:ss zzz}");
+            sb.AppendLine($"Timestamp: {timestamp:yyyy-MM-dd HH:mm:ss zzz}");
         }
-        // else
-        // {
-        //     sb.AppendLine("  Timestamp: null");
-        // }
-        //
-        // sb.AppendLine($"  Type: {messageProps?.Type ?? "null"}");
-        // sb.AppendLine($"  UserId: {messageProps?.UserId ?? "null"}");
-        // sb.AppendLine($"  AppId: {messageProps?.AppId ?? "null"}");
-        // sb.AppendLine($"  ClusterId: {messageProps?.ClusterId ?? "null"}");
 
         // Format headers if present
-        if (messageProps?.Headers?.Count > 0)
+        if (messageProps.IsHeadersPresent())
         {
-            sb.AppendLine("  Headers:");
+            sb.AppendLine("Headers:");
             foreach (var header in messageProps.Headers)
             {
-                sb.AppendLine($"    {header.Key}: {header.Value}");
+                sb.AppendLine($"  {header.Key}: {header.Value}");
             }
-        }
-        else
-        {
-            sb.AppendLine("  Headers: null");
         }
         
         return sb.ToString();
@@ -72,8 +70,8 @@ public static class MessageFormater
         }
         return sb.ToString();
     }
-    
-    public static string FormatValue(object? value, int indentationLevel = 1)
+
+    private static string FormatValue(object? value, int indentationLevel = 1)
     {
         switch (value)
         {
