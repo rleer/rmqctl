@@ -65,6 +65,7 @@ public class PublishCommandHandler : ICommandHandler
             {
                 result.ErrorMessage = "You cannot specify both a message and a file that contains the message body.";
             }
+
             if (result.GetValueForOption(fromFileOption) is { } filePath && !PathValidator.IsValidFilePath(filePath))
             {
                 result.ErrorMessage = $"The specified input file '{filePath}' is not valid.";
@@ -85,14 +86,22 @@ public class PublishCommandHandler : ICommandHandler
     private async Task Handle(Destination dest, string message, string filePath, int burstCount)
     {
         _logger.LogDebug("Running handler for publish command...");
+
+        var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (sender, e) =>
+        {
+            e.Cancel = true; // Prevent the process from terminating immediately
+            cts.Cancel(); // Signal cancellation
+        };
+
         if (!string.IsNullOrWhiteSpace(filePath))
         {
             var fileInfo = new FileInfo(Path.GetFullPath(filePath, Environment.CurrentDirectory));
-            await _publishService.PublishMessageFromFile(dest, fileInfo, burstCount);
+            await _publishService.PublishMessageFromFile(dest, fileInfo, burstCount, cts.Token);
         }
         else
         {
-            await _publishService.PublishMessage(dest, message, burstCount);
+            await _publishService.PublishMessage(dest, message, burstCount, cts.Token);
         }
     }
 }
