@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -6,15 +5,12 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using rmqctl.Configuration;
 using rmqctl.Models;
-using rmqctl.Utilities;
 
 namespace rmqctl.Services;
 
 public interface IConsumeService
 {
-    Task ConsumeMessages(string queue, AckModes ackMode, int messageCount = -1);
-    Task DumpMessagesToFile(string queue, AckModes ackMode, FileInfo outputFileInfo, int messageCount = -1);
-    Task StartContinuousConsumptionAsync(string queue, AckModes ackMode, int messageCount = -1, CancellationToken cancellationToken = default);
+    Task ConsumeMessages(string queue, AckModes ackMode, FileInfo? outputFileInfo = null, int messageCount = -1, CancellationToken cancellationToken = default);
 }
 
 public class ConsumeService : IConsumeService
@@ -30,42 +26,11 @@ public class ConsumeService : IConsumeService
         _fileConfig = fileConfig.Value;
     }
 
-    public async Task ConsumeMessages(string queue, AckModes ackMode, int messageCount = -1)
+    public async Task ConsumeMessages(string queue, AckModes ackMode, FileInfo? outputFileInfo, int messageCount = -1,
+        CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Consume {Count} message(s) from '{Queue}' queue in '{AckMode}' mode",
-            messageCount == -1 ? "all" : messageCount.ToString(), queue, ackMode);
-
-        await using var channel = await _rabbitChannelFactory.GetChannelAsync();
-
-        await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
-        {
-            _logger.LogInformation("DeliveryTag: {DeliveryTag}\nHeaders:{Properties}Message:\n{Message}", message.deliveryTag,
-                MessageFormater.FormatHeaders(message.props?.Headers), message.body);
-        }
-    }
-
-    public async Task DumpMessagesToFile(string queue, AckModes ackMode, FileInfo outputFileInfo, int messageCount = -1)
-    {
-        _logger.LogInformation("Dump {Count} message(s) from '{Queue}' queue in '{AckMode}' mode to '{OutputFile}'",
-            messageCount == -1 ? "all" : messageCount.ToString(), queue, ackMode, outputFileInfo.FullName);
-
-        await using var channel = await _rabbitChannelFactory.GetChannelAsync();
-
-        if (_fileConfig.MessagesPerFile >= messageCount)
-        {
-            await WriteMessagesToSingleFile(channel, queue, ackMode, outputFileInfo, messageCount);
-        }
-        else
-        {
-            await WriteMessagesToMultipleFiles(channel, queue, ackMode, outputFileInfo, messageCount);
-        }
-    }
-
-    public async Task StartContinuousConsumptionAsync(string queue, AckModes ackMode, int messageCount = -1, CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("[*] Starting continuous consumption of messages from '{Queue}' queue in '{AckMode}' {StoppingCondition}",
+        _logger.LogInformation("[*] Starting consuming from '{Queue}' queue in '{AckMode}' {StoppingCondition}",
             queue, ackMode, messageCount == -1 ? "until stopped" : $"until {messageCount.ToString()} messages are consumed");
-        _logger.LogInformation("[*] Press Ctrl+C to stop the consumption...");
 
         // Create a local cancellation token source to allow stopping the consumption
         var localCts = new CancellationTokenSource();
@@ -73,12 +38,13 @@ public class ConsumeService : IConsumeService
 
         await using var channel = await _rabbitChannelFactory.GetChannelAsync();
 
-        await channel.BasicQosAsync(0, _rabbitChannelFactory.PrefetchCount, false, linkedCts.Token);
+        // Caution: Prefetch count might cause redelivery loop
+        // await channel.BasicQosAsync(0, _rabbitChannelFactory.PrefetchCount, false, linkedCts.Token);
 
         var receiveChan = Channel.CreateBounded<RabbitMessage>(_rabbitChannelFactory.PrefetchCount * 2);
         var ackChan = Channel.CreateUnbounded<(ulong deliveryTag, AckModes ackMode)>();
 
-        // Hook up callback that completes the receive channel when message count is reached or cancellation is requested by user/applicaiton
+        // Hook up callback that completes the receive-channel when message count is reached or cancellation is requested by user/applicaiton
         linkedCts.Token.Register(() =>
         {
             _logger.LogDebug("[x] Completing receive channel (host: {ParentCt}, local: {LocalCt})",
@@ -91,88 +57,53 @@ public class ConsumeService : IConsumeService
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += async (_, ea) =>
         {
+            // Skip messages if cancellation is requested. Skipped and unack'd messages will be automatically requeued by RabbitMQ once the channel closes.
             if (linkedCts.Token.IsCancellationRequested)
             {
                 return;
             }
 
-            _logger.LogInformation("[m-receiver] Received message #{DeliveryTag}", ea.DeliveryTag);
+            _logger.LogDebug("[m-recv] Received message #{DeliveryTag}", ea.DeliveryTag);
             var message = new RabbitMessage(
                 System.Text.Encoding.UTF8.GetString(ea.Body.ToArray()),
                 ea.DeliveryTag,
-                ea.BasicProperties
+                ea.BasicProperties,
+                ea.Redelivered
             );
 
-            // Simulate some processing delay (e.g., for testing purposes)
-            // await Task.Delay(100);
-
             await receiveChan.Writer.WriteAsync(message, linkedCts.Token);
-            _logger.LogDebug("[m-receiver] Message #{DeliveryTag} written to receive channel", ea.DeliveryTag);
+            _logger.LogDebug("[m-recv] Message #{DeliveryTag} written to receive channel", ea.DeliveryTag);
 
             // Check if we reached the message count limit
             if (messageCount != -1 && Interlocked.Increment(ref receivedCount) == messageCount)
             {
-                _logger.LogDebug("[m-receiver] Message limit reached ({MessageCount}) - initiating cancellation!", messageCount);
+                _logger.LogDebug("[m-recv] Message limit reached ({MessageCount}) - initiating cancellation!", messageCount);
                 await localCts.CancelAsync();
             }
         };
 
         _logger.LogDebug("[*] Starting RabbitMQ consumer for queue '{Queue}'", queue);
+
+        // Start consuming messages from the specified queue
         _ = channel.BasicConsumeAsync(queue: queue, autoAck: false, consumer: consumer);
 
-        // Process received messages
-        var messageProcessor = Task.Run(async () =>
+        // Start processing received messages
+        Task messageProcessor;
+        if (outputFileInfo is null)
         {
-            _logger.LogDebug("[m-proc] Starting message processing...");
-            await foreach (var message in receiveChan.Reader.ReadAllAsync())
-            {
-                try
-                {
-                    _logger.LogInformation("[m-proc] Start processing message #{DeliveryTag}...", message.DeliveryTag);
-
-                    // Simulate some processing delay (e.g., for testing purposes)
-                    // await Task.Delay(100);
-
-                    await ackChan.Writer.WriteAsync((message.DeliveryTag, ackMode));
-                    _logger.LogDebug("[m-proc] Message #{DeliveryTag} processed successfully", message.DeliveryTag);
-                }
-                catch (Exception)
-                {
-                    _logger.LogWarning("[m-proc] Message #{DeliveryTag} failed to process", message.DeliveryTag);
-                    await ackChan.Writer.WriteAsync((message.DeliveryTag, AckModes.Requeue));
-                }
-            }
-
-            ackChan.Writer.TryComplete();
-            _logger.LogDebug("[m-proc] Done!");
-        });
-
-        // Dispatcher for acknowledgments of successfully processed messages
-        // TODO: handle multiple acks in a single call
-        var ackDispatcher = Task.Run(async () =>
+            messageProcessor = Task.Run(() => WriteMessagesToLog(receiveChan, ackChan, ackMode));
+        }
+        else if (messageCount != -1 && _fileConfig.MessagesPerFile >= messageCount)
         {
-            _logger.LogDebug("[ack-disp] Starting acknowledgment dispatcher...");
-            await foreach (var (deliveryTag, ackModeValue) in ackChan.Reader.ReadAllAsync())
-            {
-                switch (ackModeValue)
-                {
-                    case AckModes.Ack:
-                        _logger.LogDebug("[ack-disp] Acknowledging message #{DeliveryTag}", deliveryTag);
-                        await channel.BasicAckAsync(deliveryTag, multiple: false);
-                        break;
-                    case AckModes.Reject:
-                        _logger.LogDebug("[ack-disp] Rejecting message #{DeliveryTag} without requeue", deliveryTag);
-                        await channel.BasicNackAsync(deliveryTag, multiple: false, requeue: false);
-                        break;
-                    case AckModes.Requeue:
-                        _logger.LogDebug("[ack-disp] Requeuing message #{DeliveryTag}", deliveryTag);
-                        await channel.BasicNackAsync(deliveryTag, multiple: false, requeue: true);
-                        break;
-                }
-            }
+            messageProcessor = Task.Run(() => WriteMessagesToSingleFile(receiveChan, ackChan, ackMode, outputFileInfo));
+        }
+        else
+        {
+            messageProcessor = Task.Run(() => WriteMessagesToMultipleFiles(receiveChan, ackChan, ackMode, outputFileInfo));
+        }
 
-            _logger.LogDebug("[ack-disp] Done!");
-        });
+        // Start dispatcher for acknowledgments of successfully processed messages
+        var ackDispatcher = Task.Run(async () => HandleAcks(ackChan, channel));
 
         await Task.WhenAll(messageProcessor, ackDispatcher);
 
@@ -180,34 +111,111 @@ public class ConsumeService : IConsumeService
         await channel.CloseAsync();
     }
 
-    private async Task WriteMessagesToSingleFile(IChannel channel, string queue, AckModes ackMode, FileInfo outputFileInfo, int messageCount)
+    private async Task HandleAcks(Channel<(ulong deliveryTag, AckModes ackMode)> ackChan, IChannel rmqChannel)
     {
-        await using var fileStream = outputFileInfo.OpenWrite();
-        await using var writer = new StreamWriter(fileStream);
-
-        await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
+        // TODO: handle multiple acks in a single call
+        _logger.LogDebug("[ack-disp] Starting acknowledgment dispatcher...");
+        await foreach (var (deliveryTag, ackModeValue) in ackChan.Reader.ReadAllAsync())
         {
-            await writer.WriteLineAsync(
-                $"DeliveryTag: {message.deliveryTag}\nHeaders:{MessageFormater.FormatHeaders(message.props?.Headers)}Message:\n{message.body}");
-            await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
+            switch (ackModeValue)
+            {
+                case AckModes.Ack:
+                    _logger.LogDebug("[ack-disp] Acknowledging message #{DeliveryTag}", deliveryTag);
+                    await rmqChannel.BasicAckAsync(deliveryTag, multiple: false);
+                    break;
+                case AckModes.Reject:
+                    _logger.LogDebug("[ack-disp] Rejecting message #{DeliveryTag} without requeue", deliveryTag);
+                    await rmqChannel.BasicNackAsync(deliveryTag, multiple: false, requeue: false);
+                    break;
+                case AckModes.Requeue:
+                    _logger.LogDebug("[ack-disp] Requeue message #{DeliveryTag}", deliveryTag);
+                    await rmqChannel.BasicNackAsync(deliveryTag, multiple: false, requeue: true);
+                    break;
+            }
         }
+
+        _logger.LogDebug("[ack-disp] Done!");
     }
 
-    private async Task WriteMessagesToMultipleFiles(IChannel channel, string queue, AckModes ackMode, FileInfo outputFileInfo, int messageCount)
+    private async Task WriteMessagesToLog(
+        Channel<RabbitMessage> messageCache,
+        Channel<(ulong deliveryTag, AckModes ackMode)> ackCache,
+        AckModes ackMode)
     {
-        var fileIndex = 0;
-        var messagesInCurrentFile = 0;
-        var baseFileName = Path.Combine(
-            outputFileInfo.DirectoryName ?? string.Empty,
-            Path.GetFileNameWithoutExtension(outputFileInfo.Name));
-        var fileExtension = outputFileInfo.Extension;
+        _logger.LogDebug("[m-proc] Starting message processing...");
+        await foreach (var message in messageCache.Reader.ReadAllAsync())
+        {
+            try
+            {
+                _logger.LogInformation(message.ToString());
+                await ackCache.Writer.WriteAsync((message.DeliveryTag, ackMode));
+                _logger.LogDebug("[m-proc] Message #{DeliveryTag} processed successfully", message.DeliveryTag);
+            }
+            catch (Exception)
+            {
+                _logger.LogWarning("[m-proc] Message #{DeliveryTag} failed to process", message.DeliveryTag);
+                await ackCache.Writer.WriteAsync((message.DeliveryTag, AckModes.Requeue));
+            }
+        }
 
-        FileStream? fileStream = null;
-        StreamWriter? writer = null;
+        ackCache.Writer.TryComplete();
+        _logger.LogDebug("[m-proc] Done!");
+    }
+
+    private async Task WriteMessagesToSingleFile(
+        Channel<RabbitMessage> messageCache,
+        Channel<(ulong deliveryTag, AckModes ackMode)> ackCache,
+        AckModes ackMode,
+        FileInfo outputFileInfo)
+    {
+        _logger.LogDebug("[m-proc] Starting message processing...");
 
         try
         {
-            await foreach (var message in FetchMessagesAsync(channel, queue, ackMode, messageCount))
+            await using var fileStream = outputFileInfo.OpenWrite();
+            await using var writer = new StreamWriter(fileStream);
+
+            await foreach (var message in messageCache.Reader.ReadAllAsync())
+            {
+                _logger.LogDebug("[m-proc] Start processing message #{DeliveryTag}...", message.DeliveryTag);
+                await writer.WriteLineAsync(message.ToString());
+                await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
+
+                await ackCache.Writer.WriteAsync((message.DeliveryTag, ackMode));
+                _logger.LogDebug("[m-proc] Message #{DeliveryTag} processed successfully", message.DeliveryTag);
+            }
+
+            await writer.FlushAsync();
+        }
+        catch (Exception)
+        {
+            _logger.LogError("[m-proc] Failed to write messages to file '{FileName}'", outputFileInfo.FullName);
+        }
+        finally
+        {
+            ackCache.Writer.TryComplete();
+            _logger.LogDebug("[m-proc] Done!");
+        }
+    }
+
+    private async Task WriteMessagesToMultipleFiles(
+        Channel<RabbitMessage> messageCache,
+        Channel<(ulong deliveryTag, AckModes ackMode)> ackCache,
+        AckModes ackMode,
+        FileInfo outputFileInfo)
+    {
+        FileStream? fileStream = null;
+        StreamWriter? writer = null;
+        try
+        {
+            var fileIndex = 0;
+            var messagesInCurrentFile = 0;
+            var baseFileName = Path.Combine(
+                outputFileInfo.DirectoryName ?? string.Empty,
+                Path.GetFileNameWithoutExtension(outputFileInfo.Name));
+            var fileExtension = outputFileInfo.Extension;
+
+            await foreach (var message in messageCache.Reader.ReadAllAsync())
             {
                 if (writer is null || messagesInCurrentFile >= _fileConfig.MessagesPerFile)
                 {
@@ -223,19 +231,33 @@ public class ConsumeService : IConsumeService
                     messagesInCurrentFile = 0;
                 }
 
-                await writer.WriteLineAsync(
-                    $"DeliveryTag: {message.deliveryTag}\nHeaders:{MessageFormater.FormatHeaders(message.props?.Headers)}Message:\n{message.body}");
+                _logger.LogDebug("[m-proc] Start processing message #{DeliveryTag}...", message.DeliveryTag);
+
+                await writer.WriteLineAsync(message.ToString());
                 await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
                 messagesInCurrentFile++;
+
+                await ackCache.Writer.WriteAsync((message.DeliveryTag, ackMode));
+                _logger.LogDebug("[m-proc] Message #{DeliveryTag} processed successfully", message.DeliveryTag);
             }
+        }
+        // TODO: handle specific exceptions like IOException, UnauthorizedAccessException, etc.
+        catch (Exception)
+        {
+            _logger.LogError("[m-proc] Failed to write messages to file '{FileName}'", fileStream?.Name);
+            throw;
         }
         finally
         {
+            ackCache.Writer.TryComplete();
+
             if (writer != null)
             {
                 await writer.DisposeAsync();
                 await fileStream!.DisposeAsync();
             }
+
+            _logger.LogDebug("[m-proc] Done!");
         }
     }
 
@@ -248,76 +270,5 @@ public class ConsumeService : IConsumeService
         var writer = new StreamWriter(fileStream);
 
         return (fileStream, writer);
-    }
-
-    private static async IAsyncEnumerable<(string body, ulong deliveryTag, IReadOnlyBasicProperties? props)> FetchMessagesAsync(
-        IChannel channel,
-        string queue,
-        AckModes ackMode,
-        int messageCount = -1
-    )
-    {
-        var processedCount = 0;
-        var lastDeliveryTag = 0UL;
-
-        while (messageCount == -1 || processedCount < messageCount)
-        {
-            var result = ackMode switch
-            {
-                AckModes.Ack => await channel.BasicGetAsync(queue, autoAck: true),
-                AckModes.Reject or AckModes.Requeue => await channel.BasicGetAsync(queue, autoAck: false),
-                _ => null
-            };
-
-            if (result != null)
-            {
-                lastDeliveryTag = result.DeliveryTag;
-                var body = System.Text.Encoding.UTF8.GetString(result.Body.ToArray());
-
-                yield return (body, result.DeliveryTag, result.BasicProperties);
-
-                processedCount++;
-            }
-            else
-            {
-                // No more messages in the queue - reject or requeue all fetched messages
-                switch (ackMode)
-                {
-                    case AckModes.Reject:
-                        await channel.BasicNackAsync(lastDeliveryTag, true, false);
-                        break;
-                    case AckModes.Requeue:
-                        await channel.BasicNackAsync(lastDeliveryTag, true, true);
-                        break;
-                    case AckModes.Ack:
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(ackMode), ackMode, null);
-                }
-
-                yield break;
-            }
-        }
-    }
-}
-
-public class RabbitMessage
-{
-    public string Body { get; set; }
-    public ulong DeliveryTag { get; set; }
-    public IReadOnlyBasicProperties? Props { get; set; }
-
-    public RabbitMessage(string body, ulong deliveryTag, IReadOnlyBasicProperties? props)
-    {
-        this.Body = body;
-        this.DeliveryTag = deliveryTag;
-        this.Props = props;
-    }
-
-    public override string ToString()
-    {
-        return "DeliveryTag: " + DeliveryTag + "\n" +
-               "Headers: " + MessageFormater.FormatHeaders(Props?.Headers) + "\n" +
-               "Message:\n" + Body;
     }
 }

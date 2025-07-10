@@ -11,20 +11,18 @@ public class ConsumeCommandHandler : ICommandHandler
 {
     private readonly ILogger<ConsumeCommandHandler> _logger;
     private readonly IConsumeService _consumeService;
-    private readonly DaemonConfig _daemonConfig;
 
-    public ConsumeCommandHandler(ILogger<ConsumeCommandHandler> logger, IConsumeService consumeService, DaemonConfig daemonConfig)
+    public ConsumeCommandHandler(ILogger<ConsumeCommandHandler> logger, IConsumeService consumeService)
     {
         _logger = logger;
         _consumeService = consumeService;
-        _daemonConfig = daemonConfig;
     }
 
     public void Configure(RootCommand rootCommand)
     {
         _logger.LogDebug("Configuring consume command...");
 
-        var consumeCommand = new Command("consume", "Consume messages from a queue");
+        var consumeCommand = new Command("consume", "Consume messages from a queue. Warning: getting messages from a queue is a destructive action!");
 
         var queueOption = new Option<string>("--queue", "Queue name to consume messages from");
         queueOption.AddAlias("-q");
@@ -38,17 +36,12 @@ public class ConsumeCommandHandler : ICommandHandler
         countOption.AddAlias("-c");
         countOption.SetDefaultValue(-1);
 
-        var daemonOption = new Option<bool>("--daemon", "Run as a daemon, consuming messages continuously until stopped or count is reached");
-        daemonOption.AddAlias("-d");
-        daemonOption.SetDefaultValue(false);
-
         var outputOption = new Option<string>("--output", "Output file to write messages to");
 
         consumeCommand.AddOption(queueOption);
         consumeCommand.AddOption(ackModeOption);
         consumeCommand.AddOption(countOption);
         consumeCommand.AddOption(outputOption);
-        consumeCommand.AddOption(daemonOption);
 
         consumeCommand.AddValidator(result =>
         {
@@ -68,35 +61,31 @@ public class ConsumeCommandHandler : ICommandHandler
             }
         });
 
-        consumeCommand.SetHandler(Handle, queueOption, ackModeOption, countOption, outputOption, daemonOption);
+        consumeCommand.SetHandler(Handle, queueOption, ackModeOption, countOption, outputOption);
 
         rootCommand.AddCommand(consumeCommand);
     }
 
-    private async Task Handle(string queue, AckModes ackMode, int messageCount, string outputFilePath, bool daemon)
+    private async Task Handle(string queue, AckModes ackMode, int messageCount, string outputFilePath)
     {
-        _logger.LogDebug("Running handler for consume command...");
+        _logger.LogDebug("[*] Running handler for consume command...");
+        
+        var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (sender, e) =>
+        {
+            e.Cancel = true; // Prevent the process from terminating immediately
+            cts.Cancel();    // Signal cancellation
+        };
+        _logger.LogInformation("[*] Press Ctrl+C to stop consuming messages...");
 
-        if (daemon)
+        FileInfo? outputFileInfo = null;
+        if (!string.IsNullOrWhiteSpace(outputFilePath))
         {
-            // Set the daemon configuration and return
-            // The host will continue running with the background consumer service
-            _daemonConfig.IsDaemonMode = true;
-            _daemonConfig.Queue = queue;
-            _daemonConfig.AckMode = ackMode;
-            _daemonConfig.MessageCount = messageCount;
-            return;
+            outputFileInfo = new FileInfo(Path.GetFullPath(outputFilePath, Environment.CurrentDirectory));
         }
 
-        // Continue in non-daemon mode
-        if (string.IsNullOrWhiteSpace(outputFilePath))
-        {
-            await _consumeService.ConsumeMessages(queue, ackMode, messageCount);
-        }
-        else
-        {
-            var outputFileInfo = new FileInfo(Path.GetFullPath(outputFilePath, Environment.CurrentDirectory));
-            await _consumeService.DumpMessagesToFile(queue, ackMode, outputFileInfo, messageCount);
-        }
+        await _consumeService.ConsumeMessages(queue, ackMode, outputFileInfo, messageCount, cts.Token); 
+
+        _logger.LogDebug("[x] Message consumer is done (cts: {CancellationToken}). Stopping application...", cts.IsCancellationRequested);
     }
 }

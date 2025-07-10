@@ -24,7 +24,7 @@
     },
     "dev-consume-continuously": {
       "commandName": "Project",
-      "commandLineArgs": "consume -q test-queue -d -c 2 -a requeue",
+      "commandLineArgs": "consume -q test-queue -d -c 10",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }
