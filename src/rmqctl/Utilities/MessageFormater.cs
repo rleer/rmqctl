@@ -44,13 +44,7 @@ public static class MessageFormater
 
         // Format headers if present
         if (messageProps.IsHeadersPresent())
-        {
-            sb.AppendLine("Headers:");
-            foreach (var header in messageProps.Headers)
-            {
-                sb.AppendLine($"  {header.Key}: {header.Value}");
-            }
-        }
+            sb.AppendLine(FormatHeaders(messageProps.Headers));
         
         return sb.ToString();
     }
@@ -63,12 +57,12 @@ public static class MessageFormater
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine();
+        sb.AppendLine("Headers:");
         foreach (var header in headers)
         {
             sb.AppendLine($"  {header.Key}: {FormatValue(header.Value)}");
         }
-        return sb.ToString();
+        return sb.ToString().TrimEnd();
     }
 
     private static string FormatValue(object? value, int indentationLevel = 1)
