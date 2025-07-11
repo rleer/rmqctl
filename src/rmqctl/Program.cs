@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using rmqctl;
 using rmqctl.Commands;
 using rmqctl.Configuration;
+using rmqctl.MessageWriter;
 using rmqctl.Services;
 
 
@@ -18,6 +19,12 @@ builder.Services.Configure<FileConfig>(
 builder.Services.AddSingleton<IRabbitChannelFactory, RabbitChannelFactory>();
 builder.Services.AddSingleton<IPublishService, PublishService>();
 builder.Services.AddSingleton<IConsumeService, ConsumeService>();
+
+// Register message writers
+builder.Services.AddSingleton<IMessageWriter, ConsoleMessageWriter>();
+builder.Services.AddSingleton<IMessageWriter, SingleFileMessageWriter>();
+builder.Services.AddSingleton<IMessageWriter, RotatingFileMessageWriter>();
+builder.Services.AddSingleton<IMessageWriterFactory, MessageWriterFactory>();
 
 // Register command handlers
 builder.Services.AddSingleton<ICommandHandler, PublishCommandHandler>();

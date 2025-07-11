@@ -1,9 +1,8 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using rmqctl.Configuration;
+using rmqctl.MessageWriter;
 using rmqctl.Models;
 
 namespace rmqctl.Services;
@@ -17,16 +16,20 @@ public class ConsumeService : IConsumeService
 {
     private readonly ILogger<ConsumeService> _logger;
     private readonly IRabbitChannelFactory _rabbitChannelFactory;
-    private readonly FileConfig _fileConfig;
+    private readonly IMessageWriterFactory _messageWriterFactory;
 
-    public ConsumeService(ILogger<ConsumeService> logger, IRabbitChannelFactory rabbitChannelFactory, IOptions<FileConfig> fileConfig)
+    public ConsumeService(ILogger<ConsumeService> logger, IRabbitChannelFactory rabbitChannelFactory, IMessageWriterFactory messageWriterFactory)
     {
         _logger = logger;
         _rabbitChannelFactory = rabbitChannelFactory;
-        _fileConfig = fileConfig.Value;
+        _messageWriterFactory = messageWriterFactory;
     }
 
-    public async Task ConsumeMessages(string queue, AckModes ackMode, FileInfo? outputFileInfo, int messageCount = -1,
+    public async Task ConsumeMessages(
+        string queue,
+        AckModes ackMode,
+        FileInfo? outputFileInfo,
+        int messageCount = -1,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("[*] Starting consuming from '{Queue}' queue in '{AckMode}' {StoppingCondition}",
@@ -63,7 +66,7 @@ public class ConsumeService : IConsumeService
                 return;
             }
 
-            _logger.LogDebug("[m-recv] Received message #{DeliveryTag}", ea.DeliveryTag);
+            _logger.LogDebug("[*] Received message #{DeliveryTag}", ea.DeliveryTag);
             var message = new RabbitMessage(
                 System.Text.Encoding.UTF8.GetString(ea.Body.ToArray()),
                 ea.DeliveryTag,
@@ -72,12 +75,12 @@ public class ConsumeService : IConsumeService
             );
 
             await receiveChan.Writer.WriteAsync(message, linkedCts.Token);
-            _logger.LogDebug("[m-recv] Message #{DeliveryTag} written to receive channel", ea.DeliveryTag);
+            _logger.LogDebug("[*] Message #{DeliveryTag} written to receive channel", ea.DeliveryTag);
 
             // Check if we reached the message count limit
             if (messageCount != -1 && Interlocked.Increment(ref receivedCount) == messageCount)
             {
-                _logger.LogDebug("[m-recv] Message limit reached ({MessageCount}) - initiating cancellation!", messageCount);
+                _logger.LogDebug("[*] Message limit reached ({MessageCount}) - initiating cancellation!", messageCount);
                 await localCts.CancelAsync();
             }
         };
@@ -88,24 +91,14 @@ public class ConsumeService : IConsumeService
         _ = channel.BasicConsumeAsync(queue: queue, autoAck: false, consumer: consumer);
 
         // Start processing received messages
-        Task messageProcessor;
-        if (outputFileInfo is null)
-        {
-            messageProcessor = Task.Run(() => WriteMessagesToLog(receiveChan, ackChan, ackMode));
-        }
-        else if (messageCount != -1 && _fileConfig.MessagesPerFile >= messageCount)
-        {
-            messageProcessor = Task.Run(() => WriteMessagesToSingleFile(receiveChan, ackChan, ackMode, outputFileInfo));
-        }
-        else
-        {
-            messageProcessor = Task.Run(() => WriteMessagesToMultipleFiles(receiveChan, ackChan, ackMode, outputFileInfo));
-        }
+        var messageWriter = _messageWriterFactory.CreateWriter(outputFileInfo, messageCount);
+        var writerTask = Task.Run(() =>
+            messageWriter.WriteMessageAsync(receiveChan, ackChan, ackMode));
 
         // Start dispatcher for acknowledgments of successfully processed messages
-        var ackDispatcher = Task.Run(async () => HandleAcks(ackChan, channel));
+        var ackDispatcher = Task.Run(() => HandleAcks(ackChan, channel));
 
-        await Task.WhenAll(messageProcessor, ackDispatcher);
+        await Task.WhenAll(writerTask, ackDispatcher);
 
         _logger.LogDebug("[x] Continuous consumption stopped. Waiting for RabbitMQ channel to close...");
         await channel.CloseAsync();
@@ -135,140 +128,5 @@ public class ConsumeService : IConsumeService
         }
 
         _logger.LogDebug("[ack-disp] Done!");
-    }
-
-    private async Task WriteMessagesToLog(
-        Channel<RabbitMessage> messageCache,
-        Channel<(ulong deliveryTag, AckModes ackMode)> ackCache,
-        AckModes ackMode)
-    {
-        _logger.LogDebug("[m-proc] Starting message processing...");
-        await foreach (var message in messageCache.Reader.ReadAllAsync())
-        {
-            try
-            {
-                _logger.LogInformation(message.ToString());
-                await ackCache.Writer.WriteAsync((message.DeliveryTag, ackMode));
-                _logger.LogDebug("[m-proc] Message #{DeliveryTag} processed successfully", message.DeliveryTag);
-            }
-            catch (Exception)
-            {
-                _logger.LogWarning("[m-proc] Message #{DeliveryTag} failed to process", message.DeliveryTag);
-                await ackCache.Writer.WriteAsync((message.DeliveryTag, AckModes.Requeue));
-            }
-        }
-
-        ackCache.Writer.TryComplete();
-        _logger.LogDebug("[m-proc] Done!");
-    }
-
-    private async Task WriteMessagesToSingleFile(
-        Channel<RabbitMessage> messageCache,
-        Channel<(ulong deliveryTag, AckModes ackMode)> ackCache,
-        AckModes ackMode,
-        FileInfo outputFileInfo)
-    {
-        _logger.LogDebug("[m-proc] Starting message processing...");
-
-        try
-        {
-            await using var fileStream = outputFileInfo.OpenWrite();
-            await using var writer = new StreamWriter(fileStream);
-
-            await foreach (var message in messageCache.Reader.ReadAllAsync())
-            {
-                _logger.LogDebug("[m-proc] Start processing message #{DeliveryTag}...", message.DeliveryTag);
-                await writer.WriteLineAsync(message.ToString());
-                await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
-
-                await ackCache.Writer.WriteAsync((message.DeliveryTag, ackMode));
-                _logger.LogDebug("[m-proc] Message #{DeliveryTag} processed successfully", message.DeliveryTag);
-            }
-
-            await writer.FlushAsync();
-        }
-        catch (Exception)
-        {
-            _logger.LogError("[m-proc] Failed to write messages to file '{FileName}'", outputFileInfo.FullName);
-        }
-        finally
-        {
-            ackCache.Writer.TryComplete();
-            _logger.LogDebug("[m-proc] Done!");
-        }
-    }
-
-    private async Task WriteMessagesToMultipleFiles(
-        Channel<RabbitMessage> messageCache,
-        Channel<(ulong deliveryTag, AckModes ackMode)> ackCache,
-        AckModes ackMode,
-        FileInfo outputFileInfo)
-    {
-        FileStream? fileStream = null;
-        StreamWriter? writer = null;
-        try
-        {
-            var fileIndex = 0;
-            var messagesInCurrentFile = 0;
-            var baseFileName = Path.Combine(
-                outputFileInfo.DirectoryName ?? string.Empty,
-                Path.GetFileNameWithoutExtension(outputFileInfo.Name));
-            var fileExtension = outputFileInfo.Extension;
-
-            await foreach (var message in messageCache.Reader.ReadAllAsync())
-            {
-                if (writer is null || messagesInCurrentFile >= _fileConfig.MessagesPerFile)
-                {
-                    // Dispose the previous writer and file stream if they exist
-                    if (writer is not null)
-                    {
-                        await writer.FlushAsync();
-                        await writer.DisposeAsync();
-                        await fileStream!.DisposeAsync();
-                    }
-
-                    (fileStream, writer) = CreateNewFile(baseFileName, fileExtension, fileIndex++);
-                    messagesInCurrentFile = 0;
-                }
-
-                _logger.LogDebug("[m-proc] Start processing message #{DeliveryTag}...", message.DeliveryTag);
-
-                await writer.WriteLineAsync(message.ToString());
-                await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
-                messagesInCurrentFile++;
-
-                await ackCache.Writer.WriteAsync((message.DeliveryTag, ackMode));
-                _logger.LogDebug("[m-proc] Message #{DeliveryTag} processed successfully", message.DeliveryTag);
-            }
-        }
-        // TODO: handle specific exceptions like IOException, UnauthorizedAccessException, etc.
-        catch (Exception)
-        {
-            _logger.LogError("[m-proc] Failed to write messages to file '{FileName}'", fileStream?.Name);
-            throw;
-        }
-        finally
-        {
-            ackCache.Writer.TryComplete();
-
-            if (writer != null)
-            {
-                await writer.DisposeAsync();
-                await fileStream!.DisposeAsync();
-            }
-
-            _logger.LogDebug("[m-proc] Done!");
-        }
-    }
-
-    private (FileStream fileStream, StreamWriter writer) CreateNewFile(string baseFileName, string fileExtension, int fileIndex)
-    {
-        var currentFileName = $"{baseFileName}.{fileIndex}{fileExtension}";
-        _logger.LogDebug("Creating new file: {FileName}", currentFileName);
-
-        var fileStream = new FileStream(currentFileName, FileMode.Create, FileAccess.Write);
-        var writer = new StreamWriter(fileStream);
-
-        return (fileStream, writer);
     }
 }

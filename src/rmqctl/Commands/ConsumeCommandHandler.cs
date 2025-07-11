@@ -1,6 +1,5 @@
 using System.CommandLine;
 using Microsoft.Extensions.Logging;
-using rmqctl.Configuration;
 using rmqctl.Models;
 using rmqctl.Services;
 using rmqctl.Utilities;
@@ -36,6 +35,7 @@ public class ConsumeCommandHandler : ICommandHandler
         countOption.AddAlias("-c");
         countOption.SetDefaultValue(-1);
 
+        // TODO: Add output type option (e.g., text, json, yaml). Use --file to specify the output file.
         var outputOption = new Option<string>("--output", "Output file to write messages to");
 
         consumeCommand.AddOption(queueOption);
