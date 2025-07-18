@@ -13,6 +13,7 @@ public class RotatingFileMessageWriter : IMessageWriter
     private readonly FileConfig _fileConfig;
     private readonly IMessageFormatterFactory _formatterFactory;
     private FileInfo? _outputFileInfo;
+    private OutputFormat _outputFormat = OutputFormat.Text;
     private IMessageFormatter? _formatter;
 
     public RotatingFileMessageWriter(ILogger<RotatingFileMessageWriter> logger, IOptions<FileConfig> fileConfig, IMessageFormatterFactory formatterFactory)
@@ -25,6 +26,7 @@ public class RotatingFileMessageWriter : IMessageWriter
     public IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Text)
     {
         _outputFileInfo = outputFileInfo;
+        _outputFormat = outputFormat;
         _formatter = _formatterFactory.CreateFormatter(outputFormat);
         return this;
     }
@@ -44,7 +46,8 @@ public class RotatingFileMessageWriter : IMessageWriter
 
         if (_formatter == null)
         {
-            throw new InvalidOperationException("Message writer must be initialized before use.");
+            _logger.LogError("[x] Message formatter not set. Cannot write messages.");
+            throw new InvalidOperationException("Message formatter not set. Cannot write messages.");
         }
 
         // TODO: Refactor to just use StreamWriter without explicit FileStream management
@@ -73,13 +76,29 @@ public class RotatingFileMessageWriter : IMessageWriter
 
                     (fileStream, writer) = CreateNewFile(baseFileName, fileExtension, fileIndex++);
                     messagesInCurrentFile = 0;
+                    
+                    if (_outputFormat is OutputFormat.Json)
+                    {
+                        await writer.WriteLineAsync("[");
+                    }
                 }
 
                 _logger.LogDebug("[*] Start processing message #{DeliveryTag}...", message.DeliveryTag);
 
+                if (messagesInCurrentFile != 0)
+                {
+                    if (_outputFormat is OutputFormat.Json)
+                    {
+                        await writer.WriteLineAsync(","); // Add comma for JSON formatting
+                    }
+                    else if (_outputFormat is OutputFormat.Text)
+                    {
+                        await writer.WriteLineAsync(_fileConfig.MessageDelimiter); // Add delimiter for text format
+                    }
+                }
+                
                 var formattedMessage = _formatter.FormatMessage(message);
                 await writer.WriteLineAsync(formattedMessage);
-                await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
                 messagesInCurrentFile++;
 
                 await ackChannel.Writer.WriteAsync((message.DeliveryTag, ackMode));

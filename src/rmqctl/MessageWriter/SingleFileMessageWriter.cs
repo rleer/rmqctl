@@ -13,6 +13,7 @@ public class SingleFileMessageWriter : IMessageWriter
     private readonly FileConfig _fileConfig;
     private readonly IMessageFormatterFactory _formatterFactory;
     private FileInfo? _outputFileInfo;
+    private OutputFormat _outputFormat = OutputFormat.Text;
     private IMessageFormatter? _formatter;
 
     public SingleFileMessageWriter(ILogger<SingleFileMessageWriter> logger, IOptions<FileConfig> fileConfig, IMessageFormatterFactory formatterFactory)
@@ -25,6 +26,7 @@ public class SingleFileMessageWriter : IMessageWriter
     public IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Text)
     {
         _outputFileInfo = outputFileInfo;
+        _outputFormat = outputFormat;
         _formatter = _formatterFactory.CreateFormatter(outputFormat);
         return this;
     }
@@ -49,16 +51,41 @@ public class SingleFileMessageWriter : IMessageWriter
             // TODO: Maybe simplify and get FileStream from FileInfo directly
             await using var fileStream = _outputFileInfo.OpenWrite();
             await using var writer = new StreamWriter(fileStream);
-            
+
+            if (_outputFormat is OutputFormat.Json)
+            {
+                await writer.WriteLineAsync("[");
+            }
+
+            var isFirstMessage = true;
+
             await foreach (var message in messageChannel.Reader.ReadAllAsync())
             {
                 _logger.LogDebug("[*] Start processing message #{DeliveryTag}...", message.DeliveryTag);
+
+                if (!isFirstMessage)
+                {
+                    if (_outputFormat is OutputFormat.Json)
+                    {
+                        await writer.WriteLineAsync(","); // Add comma for JSON formatting
+                    }
+                    else if (_outputFormat is OutputFormat.Text)
+                    {
+                        await writer.WriteLineAsync(_fileConfig.MessageDelimiter); // Add delimiter for text format
+                    }
+                }
+                isFirstMessage = false;
+                
                 var formattedMessage = _formatter.FormatMessage(message);
                 await writer.WriteLineAsync(formattedMessage);
-                await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
 
                 await ackChannel.Writer.WriteAsync((message.DeliveryTag, ackMode));
                 _logger.LogDebug("[*] Message #{DeliveryTag} processed successfully", message.DeliveryTag);
+            }
+
+            if (_outputFormat is OutputFormat.Json)
+            {
+                await writer.WriteLineAsync("]");
             }
 
             await writer.FlushAsync();
