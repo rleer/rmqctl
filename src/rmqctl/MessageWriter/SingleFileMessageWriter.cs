@@ -36,9 +36,10 @@ public class SingleFileMessageWriter : IMessageWriter
 
         try
         {
+            // TODO: Maybe simplify and get FileStream from FileInfo directly
             await using var fileStream = _outputFileInfo.OpenWrite();
             await using var writer = new StreamWriter(fileStream);
-
+            
             await foreach (var message in messageChannel.Reader.ReadAllAsync())
             {
                 _logger.LogDebug("[*] Start processing message #{DeliveryTag}...", message.DeliveryTag);

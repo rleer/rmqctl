@@ -107,26 +107,26 @@ public class ConsumeService : IConsumeService
     private async Task HandleAcks(Channel<(ulong deliveryTag, AckModes ackMode)> ackChan, IChannel rmqChannel)
     {
         // TODO: handle multiple acks in a single call
-        _logger.LogDebug("[ack-disp] Starting acknowledgment dispatcher...");
+        _logger.LogDebug("[*] Starting acknowledgment dispatcher...");
         await foreach (var (deliveryTag, ackModeValue) in ackChan.Reader.ReadAllAsync())
         {
             switch (ackModeValue)
             {
                 case AckModes.Ack:
-                    _logger.LogDebug("[ack-disp] Acknowledging message #{DeliveryTag}", deliveryTag);
+                    _logger.LogDebug("[*] Acknowledging message #{DeliveryTag}", deliveryTag);
                     await rmqChannel.BasicAckAsync(deliveryTag, multiple: false);
                     break;
                 case AckModes.Reject:
-                    _logger.LogDebug("[ack-disp] Rejecting message #{DeliveryTag} without requeue", deliveryTag);
+                    _logger.LogDebug("[*] Rejecting message #{DeliveryTag} without requeue", deliveryTag);
                     await rmqChannel.BasicNackAsync(deliveryTag, multiple: false, requeue: false);
                     break;
                 case AckModes.Requeue:
-                    _logger.LogDebug("[ack-disp] Requeue message #{DeliveryTag}", deliveryTag);
+                    _logger.LogDebug("[*] Requeue message #{DeliveryTag}", deliveryTag);
                     await rmqChannel.BasicNackAsync(deliveryTag, multiple: false, requeue: true);
                     break;
             }
         }
 
-        _logger.LogDebug("[ack-disp] Done!");
+        _logger.LogDebug("[x] Acknowledgement dispatcher done!");
     }
 }

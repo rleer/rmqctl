@@ -37,6 +37,7 @@ public class RotatingFileMessageWriter : IMessageWriter
             throw new InvalidOperationException("Output file info must be set before writing messages.");
         }
 
+        // TODO: Refactor to just use StreamWriter without explicit FileStream management
         FileStream? fileStream = null;
         StreamWriter? writer = null;
         try
