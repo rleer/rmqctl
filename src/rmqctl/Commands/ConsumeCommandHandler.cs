@@ -35,13 +35,17 @@ public class ConsumeCommandHandler : ICommandHandler
         countOption.AddAlias("-c");
         countOption.SetDefaultValue(-1);
 
-        // TODO: Add output type option (e.g., text, json, yaml). Use --file to specify the output file.
-        var outputOption = new Option<string>("--output", "Output file to write messages to");
+        var outputFileOption = new Option<string>("--file", "Output file to write messages to");
+        outputFileOption.AddAlias("-f");
 
+        var outputFormatOption = new Option<OutputFormat>("--output", "Output format. One of: text, json or yaml.");
+        outputFormatOption.AddAlias("-o");
+        outputFormatOption.SetDefaultValue(OutputFormat.Text);
+        
         consumeCommand.AddOption(queueOption);
         consumeCommand.AddOption(ackModeOption);
         consumeCommand.AddOption(countOption);
-        consumeCommand.AddOption(outputOption);
+        consumeCommand.AddOption(outputFileOption);
 
         consumeCommand.AddValidator(result =>
         {
@@ -50,7 +54,7 @@ public class ConsumeCommandHandler : ICommandHandler
                 result.ErrorMessage = "You must specify a queue to consume messages from.";
             }
 
-            if (result.GetValueForOption(outputOption) is { } filePath && !PathValidator.IsValidFilePath(filePath))
+            if (result.GetValueForOption(outputFileOption) is { } filePath && !PathValidator.IsValidFilePath(filePath))
             {
                 result.ErrorMessage = $"The specified output file '{filePath}' is not valid.";
             }
@@ -61,12 +65,12 @@ public class ConsumeCommandHandler : ICommandHandler
             }
         });
 
-        consumeCommand.SetHandler(Handle, queueOption, ackModeOption, countOption, outputOption);
+        consumeCommand.SetHandler(Handle, queueOption, ackModeOption, countOption, outputFileOption, outputFormatOption);
 
         rootCommand.AddCommand(consumeCommand);
     }
 
-    private async Task Handle(string queue, AckModes ackMode, int messageCount, string outputFilePath)
+    private async Task Handle(string queue, AckModes ackMode, int messageCount, string outputFilePath, OutputFormat outputFormat)
     {
         _logger.LogDebug("[*] Running handler for consume command...");
         
