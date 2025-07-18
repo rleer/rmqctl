@@ -9,7 +9,7 @@ namespace rmqctl.Services;
 
 public interface IConsumeService
 {
-    Task ConsumeMessages(string queue, AckModes ackMode, FileInfo? outputFileInfo = null, int messageCount = -1, CancellationToken cancellationToken = default);
+    Task ConsumeMessages(string queue, AckModes ackMode, FileInfo? outputFileInfo = null, int messageCount = -1, OutputFormat outputFormat = OutputFormat.Text, CancellationToken cancellationToken = default);
 }
 
 public class ConsumeService : IConsumeService
@@ -30,6 +30,7 @@ public class ConsumeService : IConsumeService
         AckModes ackMode,
         FileInfo? outputFileInfo,
         int messageCount = -1,
+        OutputFormat outputFormat = OutputFormat.Text,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("[*] Starting consuming from '{Queue}' queue in '{AckMode}' {StoppingCondition}",
@@ -91,7 +92,7 @@ public class ConsumeService : IConsumeService
         _ = channel.BasicConsumeAsync(queue: queue, autoAck: false, consumer: consumer);
 
         // Start processing received messages
-        var messageWriter = _messageWriterFactory.CreateWriter(outputFileInfo, messageCount);
+        var messageWriter = _messageWriterFactory.CreateWriter(outputFileInfo, messageCount, outputFormat);
         var writerTask = Task.Run(() =>
             messageWriter.WriteMessageAsync(receiveChan, ackChan, ackMode));
 

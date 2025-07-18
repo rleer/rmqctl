@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using rmqctl.Configuration;
+using rmqctl.MessageFormatter;
 using rmqctl.Models;
 
 namespace rmqctl.MessageWriter;
@@ -10,17 +11,21 @@ public class RotatingFileMessageWriter : IMessageWriter
 {
     private readonly ILogger<RotatingFileMessageWriter> _logger;
     private readonly FileConfig _fileConfig;
+    private readonly IMessageFormatterFactory _formatterFactory;
     private FileInfo? _outputFileInfo;
+    private IMessageFormatter? _formatter;
 
-    public RotatingFileMessageWriter(ILogger<RotatingFileMessageWriter> logger, IOptions<FileConfig> fileConfig)
+    public RotatingFileMessageWriter(ILogger<RotatingFileMessageWriter> logger, IOptions<FileConfig> fileConfig, IMessageFormatterFactory formatterFactory)
     {
         _logger = logger;
         _fileConfig = fileConfig.Value;
+        _formatterFactory = formatterFactory;
     }
 
-    public IMessageWriter Initialize(FileInfo? outputFileInfo)
+    public IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Text)
     {
         _outputFileInfo = outputFileInfo;
+        _formatter = _formatterFactory.CreateFormatter(outputFormat);
         return this;
     }
 
@@ -35,6 +40,11 @@ public class RotatingFileMessageWriter : IMessageWriter
         {
             _logger.LogError("[x] Output file info is null. Cannot write messages.");
             throw new InvalidOperationException("Output file info must be set before writing messages.");
+        }
+
+        if (_formatter == null)
+        {
+            throw new InvalidOperationException("Message writer must be initialized before use.");
         }
 
         // TODO: Refactor to just use StreamWriter without explicit FileStream management
@@ -67,7 +77,8 @@ public class RotatingFileMessageWriter : IMessageWriter
 
                 _logger.LogDebug("[*] Start processing message #{DeliveryTag}...", message.DeliveryTag);
 
-                await writer.WriteLineAsync(message.ToString());
+                var formattedMessage = _formatter.FormatMessage(message);
+                await writer.WriteLineAsync(formattedMessage);
                 await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
                 messagesInCurrentFile++;
 

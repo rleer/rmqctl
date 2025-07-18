@@ -16,8 +16,6 @@ public class CommandLineBuilder
                                          o(")(")
                                        """;
     
-    public RootCommand RootCommand => _rootCommand;
-    
     public CommandLineBuilder(IHost host)
     {
         _host = host;

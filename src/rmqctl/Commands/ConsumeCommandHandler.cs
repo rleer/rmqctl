@@ -46,6 +46,7 @@ public class ConsumeCommandHandler : ICommandHandler
         consumeCommand.AddOption(ackModeOption);
         consumeCommand.AddOption(countOption);
         consumeCommand.AddOption(outputFileOption);
+        consumeCommand.AddOption(outputFormatOption);
 
         consumeCommand.AddValidator(result =>
         {
@@ -88,7 +89,7 @@ public class ConsumeCommandHandler : ICommandHandler
             outputFileInfo = new FileInfo(Path.GetFullPath(outputFilePath, Environment.CurrentDirectory));
         }
 
-        await _consumeService.ConsumeMessages(queue, ackMode, outputFileInfo, messageCount, cts.Token); 
+        await _consumeService.ConsumeMessages(queue, ackMode, outputFileInfo, messageCount, outputFormat, cts.Token); 
 
         _logger.LogDebug("[x] Message consumer is done (cts: {CancellationToken}). Stopping application...", cts.IsCancellationRequested);
     }

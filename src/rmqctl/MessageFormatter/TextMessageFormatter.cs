@@ -1,15 +1,29 @@
 using System.Text;
 using RabbitMQ.Client;
+using rmqctl.Models;
 
-namespace rmqctl.Utilities;
+namespace rmqctl.MessageFormatter;
 
-public static class MessageFormater
+public class TextMessageFormatter : IMessageFormatter
 {
-    public static string FormatBasicProperties(IReadOnlyBasicProperties? messageProps)
+    public string FormatMessage(RabbitMessage message)
+    {
+        return "DeliveryTag: " + message.DeliveryTag + "\n" +
+               "Redelivered: " + message.Redelivered + "\n" +
+               FormatBasicProperties(message.Props) +
+               "Body:\n" + message.Body;
+    }
+    
+    public string FormatMessages(IEnumerable<RabbitMessage> messages)
+    {
+        return string.Join("\n", messages.Select(FormatMessage));
+    }
+
+    private static string FormatBasicProperties(IReadOnlyBasicProperties? messageProps)
     {
         if (messageProps is null)
         {
-            return "null";
+            return string.Empty;
         }
 
         var sb = new StringBuilder();
@@ -48,12 +62,12 @@ public static class MessageFormater
         
         return sb.ToString();
     }
-    
-    public static string FormatHeaders(IDictionary<string, object?>? headers)
+
+    private static string FormatHeaders(IDictionary<string, object?>? headers)
     {
         if (headers is null || headers.Count == 0)
         {
-            return " null";
+            return "Headers: null";
         }
 
         var sb = new StringBuilder();
@@ -64,7 +78,7 @@ public static class MessageFormater
         }
         return sb.ToString().TrimEnd();
     }
-
+    
     private static string FormatValue(object? value, int indentationLevel = 1)
     {
         switch (value)

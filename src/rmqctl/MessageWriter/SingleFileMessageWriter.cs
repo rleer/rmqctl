@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using rmqctl.Configuration;
+using rmqctl.MessageFormatter;
 using rmqctl.Models;
 
 namespace rmqctl.MessageWriter;
@@ -10,17 +11,21 @@ public class SingleFileMessageWriter : IMessageWriter
 {
     private readonly ILogger<SingleFileMessageWriter> _logger;
     private readonly FileConfig _fileConfig;
+    private readonly IMessageFormatterFactory _formatterFactory;
     private FileInfo? _outputFileInfo;
+    private IMessageFormatter? _formatter;
 
-    public SingleFileMessageWriter(ILogger<SingleFileMessageWriter> logger, IOptions<FileConfig> fileConfig)
+    public SingleFileMessageWriter(ILogger<SingleFileMessageWriter> logger, IOptions<FileConfig> fileConfig, IMessageFormatterFactory formatterFactory)
     {
         _logger = logger;
         _fileConfig = fileConfig.Value;
+        _formatterFactory = formatterFactory;
     }
 
-    public IMessageWriter Initialize(FileInfo? outputFileInfo)
+    public IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Text)
     {
         _outputFileInfo = outputFileInfo;
+        _formatter = _formatterFactory.CreateFormatter(outputFormat);
         return this;
     }
 
@@ -34,6 +39,11 @@ public class SingleFileMessageWriter : IMessageWriter
             throw new InvalidOperationException("Output file info must be set before writing messages.");
         }
 
+        if (_formatter == null)
+        {
+            throw new InvalidOperationException("Message writer must be initialized before use.");
+        }
+
         try
         {
             // TODO: Maybe simplify and get FileStream from FileInfo directly
@@ -43,7 +53,8 @@ public class SingleFileMessageWriter : IMessageWriter
             await foreach (var message in messageChannel.Reader.ReadAllAsync())
             {
                 _logger.LogDebug("[*] Start processing message #{DeliveryTag}...", message.DeliveryTag);
-                await writer.WriteLineAsync(message.ToString());
+                var formattedMessage = _formatter.FormatMessage(message);
+                await writer.WriteLineAsync(formattedMessage);
                 await writer.WriteLineAsync(_fileConfig.MessageDelimiter);
 
                 await ackChannel.Writer.WriteAsync((message.DeliveryTag, ackMode));

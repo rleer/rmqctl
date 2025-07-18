@@ -1,8 +1,10 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using rmqctl;
 using rmqctl.Commands;
 using rmqctl.Configuration;
+using rmqctl.MessageFormatter;
 using rmqctl.MessageWriter;
 using rmqctl.Services;
 
@@ -20,6 +22,11 @@ builder.Services.AddSingleton<IRabbitChannelFactory, RabbitChannelFactory>();
 builder.Services.AddSingleton<IPublishService, PublishService>();
 builder.Services.AddSingleton<IConsumeService, ConsumeService>();
 
+// Register message formatters
+builder.Services.AddSingleton<IMessageFormatter, TextMessageFormatter>();
+builder.Services.AddSingleton<IMessageFormatter, JsonMessageFormatter>();
+builder.Services.AddSingleton<IMessageFormatterFactory, MessageFormatterFactory>();
+
 // Register message writers
 builder.Services.AddSingleton<IMessageWriter, ConsoleMessageWriter>();
 builder.Services.AddSingleton<IMessageWriter, SingleFileMessageWriter>();
@@ -33,11 +40,21 @@ builder.Services.AddSingleton<ICommandHandler, ConsumeCommandHandler>();
 // Build host to create service provider and configuration
 var host = builder.Build();
 
-// Configure commands
-var commandLineBuilder = new CommandLineBuilder(host);
-commandLineBuilder.ConfigureCommands();
+var logger = host.Services.GetRequiredService<ILogger<Program>>();
 
-// Run the command line application
-var exitCode = await commandLineBuilder.RunAsync(args);
+try
+{
+    // Configure commands
+    var commandLineBuilder = new CommandLineBuilder(host);
+    commandLineBuilder.ConfigureCommands();
+    
+    // Run the command line application
+    var exitCode = await commandLineBuilder.RunAsync(args);
 
-return exitCode;
+    return exitCode; 
+}
+catch (Exception e)
+{
+    logger.LogError(e, "Application terminated unexpectedly");
+    return 1;
+}
