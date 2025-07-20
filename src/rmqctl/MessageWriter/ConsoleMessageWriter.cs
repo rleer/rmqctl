@@ -40,9 +40,9 @@ public class ConsoleMessageWriter : IMessageWriter
                 await ackChannel.Writer.WriteAsync((message.DeliveryTag, ackMode));
                 _logger.LogDebug("[*] Message #{DeliveryTag} processed successfully", message.DeliveryTag);
             }
-            catch (Exception)
+            catch (Exception e)
             {
-                _logger.LogWarning("[*] Message #{DeliveryTag} failed to process", message.DeliveryTag);
+                _logger.LogWarning("[*] Message #{DeliveryTag} failed to process: {Message}", message.DeliveryTag, e.Message);
                 await ackChannel.Writer.WriteAsync((message.DeliveryTag, AckModes.Requeue));
             }
         }

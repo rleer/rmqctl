@@ -7,48 +7,36 @@ namespace rmqctl.MessageFormatter;
 
 public class JsonMessageFormatter : IMessageFormatter
 {
-    private readonly JsonSerializerOptions _jsonOptions;
-
-    public JsonMessageFormatter()
-    {
-        _jsonOptions = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
-    }
-
     public string FormatMessage(RabbitMessage message)
     {
-        var jsonObject = CreateMessageObject(message);
-        return JsonSerializer.Serialize(jsonObject, _jsonOptions);
+        var messageDto = CreateMessageDto(message);
+        return JsonSerializer.Serialize(messageDto, JsonSerializationContext.Default.MessageDto);
     }
 
     public string FormatMessages(IEnumerable<RabbitMessage> messages)
     {
-        var jsonArray = messages.Select(CreateMessageObject).ToArray();
-        return JsonSerializer.Serialize(jsonArray, _jsonOptions);
+        var messageDtos = messages.Select(CreateMessageDto).ToArray();
+        return JsonSerializer.Serialize(messageDtos, JsonSerializationContext.Default.MessageDtoArray);
     }
 
-    private object CreateMessageObject(RabbitMessage message)
+    private MessageDto CreateMessageDto(RabbitMessage message)
     {
-        var messageObj = new Dictionary<string, object>
-        {
-            ["deliveryTag"] = message.DeliveryTag,
-            ["redelivered"] = message.Redelivered,
-            ["body"] = message.Body
-        };
-
+        Dictionary<string, object>? properties = null;
         if (message.Props != null)
         {
-            var properties = CreatePropertiesObject(message.Props);
-            if (properties.Count > 0)
+            var props = CreatePropertiesObject(message.Props);
+            if (props.Count > 0)
             {
-                messageObj["properties"] = properties;
+                properties = props;
             }
         }
 
-        return messageObj;
+        return new MessageDto(
+            message.DeliveryTag,
+            message.Redelivered,
+            message.Body,
+            properties
+        );
     }
 
     private Dictionary<string, object> CreatePropertiesObject(IReadOnlyBasicProperties props)
