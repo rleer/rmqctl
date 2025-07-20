@@ -6,6 +6,13 @@
     <RootNamespace>rmqctl</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <SelfContained>true</SelfContained>
+    <PublishAot>true</PublishAot>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
+    <OptimizationPreference>Speed</OptimizationPreference>
   </PropertyGroup>
 
   <ItemGroup>
