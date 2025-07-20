@@ -69,11 +69,15 @@ if (!string.IsNullOrEmpty(customConfigPath))
 // Add environment variables as the highest priority configuration source
 builder.Configuration.AddEnvironmentVariables("RMQCTL_");
 
-// Register configuration settings
-builder.Services.Configure<RabbitMqConfig>(
-    builder.Configuration.GetSection(nameof(RabbitMqConfig)));
-builder.Services.Configure<FileConfig>(
-    builder.Configuration.GetSection(nameof(FileConfig)));
+// Register configuration settings - avoid using IOptions to keep it simple
+var rabbitMqConfig = new RabbitMqConfig();
+builder.Configuration.GetSection(nameof(RabbitMqConfig)).Bind(rabbitMqConfig);
+builder.Services.AddSingleton(rabbitMqConfig);
+
+var fileConfig = new FileConfig();
+builder.Configuration.GetSection(nameof(FileConfig)).Bind(fileConfig);
+builder.Services.AddSingleton(fileConfig);
+
 
 // Register services in the DI container
 builder.Services.AddSingleton<IRabbitChannelFactory, RabbitChannelFactory>();

@@ -14,10 +14,10 @@ public class MessageWriterFactory : IMessageWriterFactory
     private readonly IEnumerable<IMessageWriter> _writers;
     private readonly FileConfig _fileConfig;
     
-    public MessageWriterFactory(IOptions<FileConfig> fileConfig, IEnumerable<IMessageWriter> writers)
+    public MessageWriterFactory(FileConfig fileConfig, IEnumerable<IMessageWriter> writers)
     {
         _writers = writers;
-        _fileConfig = fileConfig.Value;
+        _fileConfig = fileConfig;
     }
 
     public IMessageWriter CreateWriter(FileInfo? outputFileInfo, int messageCount, OutputFormat outputFormat = OutputFormat.Text)

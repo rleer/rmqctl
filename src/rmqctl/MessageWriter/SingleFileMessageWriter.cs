@@ -16,10 +16,10 @@ public class SingleFileMessageWriter : IMessageWriter
     private OutputFormat _outputFormat = OutputFormat.Text;
     private IMessageFormatter? _formatter;
 
-    public SingleFileMessageWriter(ILogger<SingleFileMessageWriter> logger, IOptions<FileConfig> fileConfig, IMessageFormatterFactory formatterFactory)
+    public SingleFileMessageWriter(ILogger<SingleFileMessageWriter> logger, FileConfig fileConfig, IMessageFormatterFactory formatterFactory)
     {
         _logger = logger;
-        _fileConfig = fileConfig.Value;
+        _fileConfig = fileConfig;
         _formatterFactory = formatterFactory;
     }
 

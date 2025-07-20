@@ -16,10 +16,10 @@ public class RotatingFileMessageWriter : IMessageWriter
     private OutputFormat _outputFormat = OutputFormat.Text;
     private IMessageFormatter? _formatter;
 
-    public RotatingFileMessageWriter(ILogger<RotatingFileMessageWriter> logger, IOptions<FileConfig> fileConfig, IMessageFormatterFactory formatterFactory)
+    public RotatingFileMessageWriter(ILogger<RotatingFileMessageWriter> logger, FileConfig fileConfig, IMessageFormatterFactory formatterFactory)
     {
         _logger = logger;
-        _fileConfig = fileConfig.Value;
+        _fileConfig = fileConfig;
         _formatterFactory = formatterFactory;
     }
 

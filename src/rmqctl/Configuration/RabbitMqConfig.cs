@@ -2,12 +2,12 @@ namespace rmqctl.Configuration;
 
 public class RabbitMqConfig
 {
-    public required string Host { get; set; }
-    public required string VirtualHost { get; set; }
-    public required int Port { get; set; }
-    public required string User { get; set; }
-    public required string Password { get; set; }
-    public required string Exchange { get; set; }
-    public required string ClientName { get; set; }
-    public required ushort PrefetchCount { get; set; }
+    public  string Host { get; set; } = "localhost";
+    public  string VirtualHost { get; set; } = "/";
+    public  int Port { get; set; } = 5672;
+    public  string User { get; set; } = "guest";
+    public  string Password { get; set; } = "guest";
+    public  string Exchange { get; set; } = "amq.direct";
+    public  string ClientName { get; set; } = "rmqctl-client";
+    public  ushort PrefetchCount { get; set; } = 100;
 }

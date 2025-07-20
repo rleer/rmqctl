@@ -3,6 +3,7 @@
   "profiles": {
     "dev": {
       "commandName": "Project",
+      "commandLineArgs": "consume -q test-queue -c 1",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }

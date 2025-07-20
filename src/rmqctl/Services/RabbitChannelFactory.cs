@@ -19,9 +19,9 @@ public class RabbitChannelFactory : IRabbitChannelFactory
     private IConnection? _connection;
     public ushort PrefetchCount { get; set; }
 
-    public RabbitChannelFactory(IOptions<RabbitMqConfig> options, ILogger<RabbitChannelFactory> logger)
+    public RabbitChannelFactory(RabbitMqConfig rabbitMqConfig, ILogger<RabbitChannelFactory> logger)
     {
-        _config = options.Value;
+        _config = rabbitMqConfig;
         _logger = logger;
         _connectionFactory = new ConnectionFactory
         {
