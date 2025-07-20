@@ -40,9 +40,8 @@ public class CommandLineBuilder
         verboseOption.SetDefaultValue(false);
         _rootCommand.AddGlobalOption(verboseOption);
 
-        // TODO: handle this option
-        var configFileOption = new Option<string>("--config", "Path to the configuration file");
-        configFileOption.SetDefaultValue("appsettings.json");
+        var configFileOption = new Option<string>("--config", "Path to the configuration file (TOML format)");
+        configFileOption.SetDefaultValue("~/config/rmqctl/config.toml");
         _rootCommand.AddGlobalOption(configFileOption);
     }
 

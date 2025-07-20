@@ -6,41 +6,6 @@
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }
-    },
-    "dev-publish": {
-      "commandName": "Project",
-      "commandLineArgs": "publish -q test-queue -m test-message -b 10",
-      "environmentVariables": {
-        "DOTNET_ENVIRONMENT": "Development"
-      }
-    },
-    "dev-publish-from-file": {
-      "commandName": "Project",
-      "commandLineArgs": "publish -q test-queue --from-file ../../test/rmqctl.Test.Xunit/Files/single_line.txt",
-      "environmentVariables": {
-        "DOTNET_ENVIRONMENT": "Development"
-      }
-    },
-    "dev-consume": {
-      "commandName": "Project",
-      "commandLineArgs": "consume -q test-queue -c 2 -d",
-      "environmentVariables": {
-        "DOTNET_ENVIRONMENT": "Development"
-      }
-    },
-    "dev-consume-continuously": {
-      "commandName": "Project",
-      "commandLineArgs": "consume -q test-queue -d -c 10",
-      "environmentVariables": {
-        "DOTNET_ENVIRONMENT": "Development"
-      }
-    },
-    "dev-consume-to-file": {
-      "commandName": "Project",
-      "commandLineArgs": "consume -q test-queue --output output.txt",
-      "environmentVariables": {
-        "DOTNET_ENVIRONMENT": "Development"
-      }
     }
   }
 }
