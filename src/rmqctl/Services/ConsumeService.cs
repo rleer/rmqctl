@@ -45,7 +45,7 @@ public class ConsumeService : IConsumeService
         // Caution: Prefetch count might cause redelivery loop
         // await channel.BasicQosAsync(0, _rabbitChannelFactory.PrefetchCount, false, linkedCts.Token);
 
-        var receiveChan = Channel.CreateBounded<RabbitMessage>(_rabbitChannelFactory.PrefetchCount * 2);
+        var receiveChan = Channel.CreateUnbounded<RabbitMessage>();
         var ackChan = Channel.CreateUnbounded<(ulong deliveryTag, AckModes ackMode)>();
 
         // Hook up callback that completes the receive-channel when message count is reached or cancellation is requested by user/applicaiton
