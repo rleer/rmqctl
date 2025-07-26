@@ -42,9 +42,6 @@ public class ConsumeService : IConsumeService
 
         await using var channel = await _rabbitChannelFactory.GetChannelAsync();
 
-        // Caution: Prefetch count might cause redelivery loop
-        // await channel.BasicQosAsync(0, _rabbitChannelFactory.PrefetchCount, false, linkedCts.Token);
-
         var receiveChan = Channel.CreateUnbounded<RabbitMessage>();
         var ackChan = Channel.CreateUnbounded<(ulong deliveryTag, AckModes ackMode)>();
 

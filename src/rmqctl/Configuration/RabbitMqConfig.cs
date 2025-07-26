@@ -9,5 +9,4 @@ public class RabbitMqConfig
     public  string Password { get; set; } = "guest";
     public  string Exchange { get; set; } = "amq.direct";
     public  string ClientName { get; set; } = "rmqctl-client";
-    public  ushort PrefetchCount { get; set; } = 100;
 }

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using rmqctl.Configuration;
 
@@ -8,7 +7,6 @@ namespace rmqctl.Services;
 public interface IRabbitChannelFactory
 {
     Task<IChannel> GetChannelAsync();
-    ushort PrefetchCount { get; }
 }
 
 public class RabbitChannelFactory : IRabbitChannelFactory
@@ -17,7 +15,6 @@ public class RabbitChannelFactory : IRabbitChannelFactory
     private readonly ILogger<RabbitChannelFactory> _logger;
     private readonly ConnectionFactory _connectionFactory;
     private IConnection? _connection;
-    public ushort PrefetchCount { get; set; }
 
     public RabbitChannelFactory(RabbitMqConfig rabbitMqConfig, ILogger<RabbitChannelFactory> logger)
     {
@@ -32,7 +29,6 @@ public class RabbitChannelFactory : IRabbitChannelFactory
             VirtualHost = _config.VirtualHost,
             ClientProvidedName = _config.ClientName
         };
-        PrefetchCount = _config.PrefetchCount;
     }
 
     public async Task<IChannel> GetChannelAsync()
@@ -44,10 +40,10 @@ public class RabbitChannelFactory : IRabbitChannelFactory
     // TODO: Pass cancellation token
     private async Task<IChannel> GetChannelAsync(IConnection connection)
     {
-        _logger.LogDebug("Creating RabbitMQ channel...");
+        _logger.LogDebug("Acquiring RabbitMQ channel");
         var channel = await connection.CreateChannelAsync();
 
-        channel.BasicReturnAsync += (sender, @event) =>
+        channel.BasicReturnAsync += (_, @event) =>
         {
             _logger.LogWarning("Message returned: {ReplyCode} - {ReplyText}", @event.ReplyCode, @event.ReplyText);
             return Task.CompletedTask;
@@ -61,11 +57,12 @@ public class RabbitChannelFactory : IRabbitChannelFactory
         if (_connection != null && _connection.IsOpen)
             return _connection;
 
-        _logger.LogDebug("Connecting to RabbitMQ on {Host}:{Port}...", _config.Host, _config.Port);
+        _logger.LogDebug("Connecting to RabbitMQ, host={Host}, port={Port}, virtual host={VirtualHost}, client name={ClientName}", 
+            _config.Host, _config.Port, _config.VirtualHost, _config.ClientName);
         _connection = await _connectionFactory.CreateConnectionAsync();
 
         // Set up connection shutdown event handler
-        _connection.ConnectionShutdownAsync += (sender, args) =>
+        _connection.ConnectionShutdownAsync += (_, args) =>
         {
             _logger.LogWarning("RabbitMQ connection shut down: {Reason}", args.ReplyText);
             return Task.CompletedTask;

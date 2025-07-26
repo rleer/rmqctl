@@ -62,7 +62,6 @@ public class ConfigurationPathHelper
                Password = "guest"
                Exchange = "amq.direct"
                ClientName = "rabbit-cli-tool"
-               PrefetchCount = 200
 
                [FileConfig]
                MessageDelimiter = "=================="
