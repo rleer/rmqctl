@@ -28,7 +28,6 @@ public class PublishCommandHandler : ICommandHandler
 
         var exchangeOption = new Option<string>("--exchange", "Exchange name to send message to");
         exchangeOption.AddAlias("-e");
-        exchangeOption.SetDefaultValue("amq.direct");
 
         var routingKeyOption = new Option<string>("--routing-key", "Routing key to send message to");
         routingKeyOption.AddAlias("-r");
@@ -51,9 +50,10 @@ public class PublishCommandHandler : ICommandHandler
 
         publishCommand.AddValidator(result =>
         {
-            if (result.GetValueForOption(queueOption) is null && result.GetValueForOption(routingKeyOption) is null)
+            if (result.GetValueForOption(queueOption) is null &&
+                (result.GetValueForOption(routingKeyOption) is null || result.GetValueForOption(exchangeOption) is null))
             {
-                result.ErrorMessage = "You must specify either a queue or an exchange and routing key.";
+                result.ErrorMessage = "You must specify a queue or both an exchange and a routing key.";
             }
 
             if (result.GetValueForOption(messageOption) is null && result.GetValueForOption(fromFileOption) is null)
@@ -88,7 +88,7 @@ public class PublishCommandHandler : ICommandHandler
         _logger.LogDebug("Running handler for publish command...");
 
         var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (sender, e) =>
+        Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true; // Prevent the process from terminating immediately
             cts.Cancel(); // Signal cancellation

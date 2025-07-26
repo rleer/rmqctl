@@ -25,28 +25,20 @@ public class PublishService : IPublishService
 
     public async Task PublishMessage(Destination dest, string message, int burstCount = 1, CancellationToken cancellationToken = default)
     {
+        _logger.LogDebug(
+            "Initiating publish operation: exchange={Exchange}, routing-key={RoutingKey}, queue={Queue}, messageLength={Length}, burstCount={Count}",
+            dest.Exchange, dest.RoutingKey, dest.Queue, message.Length, burstCount);
         try
         {
             await using var channel = await _rabbitChannelFactory.GetChannelAsync();
 
-            if (dest.Queue is not null)
-            {
-                await PublishViaTempKey(channel, dest.Queue, message, dest.Exchange, burstCount, cancellationToken);
-            }
-            else if (dest.Exchange is not null && dest.RoutingKey is not null)
-            {
-                _logger.LogInformation("[*] Publishing {Count} {Messages} via exchange: {Exchange}, routing-key: {RoutingKey}...",
-                    burstCount, burstCount > 1 ? "messages" : "message", dest.Exchange, dest.RoutingKey);
-                await Publish(channel, message, dest.Exchange, dest.RoutingKey, burstCount, cancellationToken);
-            }
-            else
-            {
-                throw new ArgumentException("Either a queue or a combination of exchange and routing key must be specified");
-            }
+            await Publish(channel, message, dest.Exchange ?? string.Empty,
+                dest.Queue ?? dest.RoutingKey ?? throw new ArgumentException("Either a queue or a combination of exchange and routing key must be specified"),
+                burstCount, cancellationToken);
         }
         catch (OperationInterruptedException e)
         {
-            _logger.LogError("[x] Failed to publish message with target {Destination}: {Message}",
+            _logger.LogError(e, "[x] Failed to publish message with target {Destination}: {Message}",
                 dest.Queue ?? $"{dest.RoutingKey} via {dest.Exchange}",
                 e.Message);
         }
@@ -72,38 +64,17 @@ public class PublishService : IPublishService
         throw new ArgumentException($"File {fileInfo.FullName} is empty");
     }
 
-    private async Task PublishViaTempKey(IChannel channel, string queue, string message, string? exchange, int burstCount = 1, CancellationToken cancellationToken = default)
-    {
-        // Use a temporary routing key for the message
-        // TODO: Consider using a more robust temporary key generation strategy or a unique identifier
-        var routingKey = $"temp-key-{queue}";
-
-        // TODO: Handle case where default exchange does not exist
-        // TODO: Consider case when exchange was set but does not exist
-        var destExchange = exchange ?? "amq.direct";
-        _logger.LogInformation("[*] Publishing {Count} message(s) to queue: {Queue}, routing-key: {RoutingKey}, exchange: {Exchange}...",
-            burstCount, queue, routingKey, destExchange);
-
-        _logger.LogDebug("[pub] Create temporary binding...");
-        await channel.QueueBindAsync(queue, destExchange, routingKey, cancellationToken: cancellationToken);
-        
-        await Publish(channel, message, destExchange, routingKey, burstCount, cancellationToken);
-
-        _logger.LogDebug("[pub] Remove temporary binding...");
-        await channel.QueueUnbindAsync(queue, destExchange, routingKey, cancellationToken: cancellationToken);
-    }
-    
-    private static async Task Publish(IChannel channel, string message, string exchange, string routingKey, int burstCount = 1,
+    private static async Task Publish(
+        IChannel channel,
+        string message,
+        string exchange,
+        string routingKey,
+        int burstCount = 1,
         CancellationToken cancellationToken = default)
     {
-#if !DEBUG
         var body = Encoding.UTF8.GetBytes(message);
-#endif
         for (var i = 0; i < burstCount; i++)
         {
-#if DEBUG
-            var body = Encoding.UTF8.GetBytes($"#{i}: {message}");
-#endif
             await channel.BasicPublishAsync(exchange, routingKey, true, body, cancellationToken);
         }
     }

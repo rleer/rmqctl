@@ -1,9 +1,14 @@
 ﻿{
   "$schema": "http://json.schemastore.org/launchsettings.json",
   "profiles": {
-    "dev": {
+    "consume": {
       "commandName": "Project",
       "commandLineArgs": "consume -q test-queue -c 1 -o json --config rmqctl.toml"
+    },
+    "publish": {
+      "commandName": "Project",
+      "commandLineArgs": "publish -q test-queue -m loool --config rmqctl.toml"
     }
   }
 }
+
