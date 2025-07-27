@@ -2,7 +2,6 @@ using System.CommandLine;
 using Microsoft.Extensions.Logging;
 using rmqctl.Models;
 using rmqctl.Services;
-using rmqctl.Utilities;
 
 namespace rmqctl.Commands;
 
@@ -56,6 +55,21 @@ public class PublishCommandHandler : ICommandHandler
                 result.ErrorMessage = "You must specify a queue or both an exchange and a routing key.";
             }
 
+            if (result.GetValueForOption(queueOption) is { } queue && string.IsNullOrEmpty(queue))
+            {
+                result.ErrorMessage = "Queue name cannot be empty.";
+            }
+            
+            if (result.GetValueForOption(exchangeOption) is { } exchange && string.IsNullOrEmpty(exchange))
+            {
+                result.ErrorMessage = "Exchange name cannot be empty. Consider using the --queue option if you want to send messages directly to a queue.";
+            }
+            
+            if (result.GetValueForOption(routingKeyOption) is { } routingKey && string.IsNullOrEmpty(routingKey))
+            {
+                result.ErrorMessage = "Routing key cannot be empty. Consider using the --queue option if you want to send messages directly to a queue.";
+            }
+
             if (result.GetValueForOption(messageOption) is null && result.GetValueForOption(fromFileOption) is null)
             {
                 result.ErrorMessage = "You must specify a message to send or a file that contains the message body.";
@@ -66,9 +80,9 @@ public class PublishCommandHandler : ICommandHandler
                 result.ErrorMessage = "You cannot specify both a message and a file that contains the message body.";
             }
 
-            if (result.GetValueForOption(fromFileOption) is { } filePath && !PathValidator.IsValidFilePath(filePath))
+            if (result.GetValueForOption(fromFileOption) is { } filePath && !File.Exists(filePath))
             {
-                result.ErrorMessage = $"The specified input file '{filePath}' is not valid.";
+                result.ErrorMessage = $"Input file '{filePath}' not found.";
             }
         });
 
