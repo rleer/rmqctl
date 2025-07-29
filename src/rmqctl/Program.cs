@@ -8,6 +8,7 @@ using rmqctl.Configuration;
 using rmqctl.MessageFormatter;
 using rmqctl.MessageWriter;
 using rmqctl.Services;
+using Spectre.Console;
 
 // Parse command line arguments early to get configuration file path
 string? customConfigPath = null;
@@ -109,14 +110,15 @@ try
     // Configure commands
     var commandLineBuilder = new CommandLineBuilder(host);
     commandLineBuilder.ConfigureCommands();
-    
+
     // Run the command line application
     var exitCode = await commandLineBuilder.RunAsync(args);
 
-    return exitCode; 
+    return exitCode;
 }
 catch (Exception e)
 {
+    AnsiConsole.MarkupLineInterpolated($"[indianred1]⚠ An error occurred: {e.Message}[/]");
     logger.LogError(e, "Application terminated unexpectedly");
     return 1;
 }
