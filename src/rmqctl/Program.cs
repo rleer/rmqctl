@@ -12,6 +12,7 @@ using Spectre.Console;
 
 // Parse command line arguments early to get configuration file path
 string? customConfigPath = null;
+var verboseLogging = false;
 
 // Simple command line argument parsing to find the custom config path
 for (var i = 0; i < args.Length; i++)
@@ -21,11 +22,15 @@ for (var i = 0; i < args.Length; i++)
         if (i + 1 < args.Length)
         {
             customConfigPath = args[i + 1];
-            break;
         }
+    }
+    if (args[i] == "--verbose")
+    {
+        verboseLogging = true;
     }
 }
 
+// TODO: Replace with manual DI container and configuration setup to avoid potential overhead of using Host
 var builder = Host.CreateApplicationBuilder();
 
 // Clear default configuration sources and build custom configuration
@@ -68,6 +73,24 @@ else
 
 // Add environment variables as the highest priority configuration source
 builder.Configuration.AddEnvironmentVariables("RMQCTL_");
+
+builder.Logging.ClearProviders();
+
+var logLevel = verboseLogging ? LogLevel.Debug : LogLevel.None;
+// TODO: Set minimum log level later to avoid early parsing of arguments
+builder.Logging.AddConsole(options => { options.LogToStandardErrorThreshold = LogLevel.Trace; })
+    .AddFilter("Microsoft", LogLevel.Warning)
+    .AddFilter("System", LogLevel.Warning)
+    .SetMinimumLevel(logLevel);
+
+// TODO: Replace with own logger formatter
+// [14:54:42 DEBUG] 
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.SingleLine = true;
+    options.TimestampFormat = "HH:mm:ss ";
+    options.IncludeScopes = false;
+});
 
 // Register configuration settings - avoid using IOptions to keep it simple
 var rabbitMqConfig = new RabbitMqConfig();
