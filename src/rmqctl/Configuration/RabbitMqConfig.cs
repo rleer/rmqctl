@@ -2,6 +2,7 @@ namespace rmqctl.Configuration;
 
 public class RabbitMqConfig
 {
+    public const string RabbitMqConfigName = "RabbitMq";
     public  string Host { get; set; } = "localhost";
     public  string VirtualHost { get; set; } = "/";
     public  int Port { get; set; } = 5672;

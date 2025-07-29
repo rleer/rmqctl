@@ -31,6 +31,8 @@ public class TomlConfigurationProvider : ConfigurationProvider
       {
          // If TOML parsing fails, just skip this configuration source
          Data = new Dictionary<string, string?>();
+         // TODO: User logger and add user-friendly error message
+         Console.Error.WriteLine($"Failed to read toml file '{_filePath}'. Please check the file format and ensure it is valid TOML.");
       }
    }
 

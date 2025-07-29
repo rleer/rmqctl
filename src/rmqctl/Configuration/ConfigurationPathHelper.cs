@@ -54,7 +54,7 @@ public class ConfigurationPathHelper
                # rmqctl Configuration File
                # This file contains default settings for the rmqctl CLI tool
 
-               [RabbitMqConfig]
+               [RabbitMq]
                Host = "localhost"
                Port = 5672
                VirtualHost = "/"
@@ -64,13 +64,7 @@ public class ConfigurationPathHelper
                ClientName = "rabbit-cli-tool"
 
                [FileConfig]
-               MessageDelimiter = "=================="
                MessagesPerFile = 10000
-
-               [Logging.LogLevel]
-               Default = "Information"
-               Microsoft = "Warning"
-               "Microsoft.Hosting.Lifetime" = "Information"
                """;
     }
 }

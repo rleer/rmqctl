@@ -1,5 +1,5 @@
 # rmqctl Configuration File
-[RabbitMqConfig]
+[RabbitMq]
 Host = "localhost"
 Port = 5672
 VirtualHost = "/"
@@ -10,10 +10,4 @@ ClientName = "rabbit-cli-tool"
 PrefetchCount = 200
 
 [FileConfig]
-MessageDelimiter = "=================="
 MessagesPerFile = 10000
-
-[Logging.LogLevel]
-Default = "Debug"
-Microsoft = "Warning"
-"Microsoft.Hosting.Lifetime" = "Information"

@@ -54,16 +54,15 @@ if (File.Exists(userConfigPath))
 }
 
 // Add custom configuration file if specified
-if (!string.IsNullOrEmpty(customConfigPath))
+// TODO: Prompt user if file does not exist and fallback to default config is used
+if (File.Exists(customConfigPath))
 {
-    if (File.Exists(customConfigPath))
-    {
-        builder.Configuration.AddTomlConfig(customConfigPath);
-    }
-    else
-    {
-        Console.Error.WriteLine($"Warning: Custom configuration file '{customConfigPath}' does not exist!");
-    }
+    builder.Configuration.AddTomlConfig(customConfigPath);
+}
+else
+{
+    // TODO: User logger and add user-friendly error message
+    Console.Error.WriteLine("Configuration file not found. Using default configuration.");
 }
 
 // Add environment variables as the highest priority configuration source
@@ -71,7 +70,7 @@ builder.Configuration.AddEnvironmentVariables("RMQCTL_");
 
 // Register configuration settings - avoid using IOptions to keep it simple
 var rabbitMqConfig = new RabbitMqConfig();
-builder.Configuration.GetSection(nameof(RabbitMqConfig)).Bind(rabbitMqConfig);
+builder.Configuration.GetSection(RabbitMqConfig.RabbitMqConfigName).Bind(rabbitMqConfig);
 builder.Services.AddSingleton(rabbitMqConfig);
 
 var fileConfig = new FileConfig();
