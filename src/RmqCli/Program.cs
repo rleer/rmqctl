@@ -72,7 +72,7 @@ else if (!string.IsNullOrEmpty(customConfigPath))
 }
 
 // Add environment variables as the highest priority configuration source
-builder.Configuration.AddEnvironmentVariables("RMQCTL_");
+builder.Configuration.AddEnvironmentVariables("RMQCLI_");
 
 builder.Logging.ClearProviders();
 

@@ -1,6 +1,6 @@
-# rmqctl - Developer Tool for RabbitMQ
+# rmq - RabbitMQ CLI Tool
 
-`rmqctl` is a command line tool for RabbitMQ focused on developers working with RabbitMQ. 
+`rmq` is a command line tool for RabbitMQ focused on developers working with RabbitMQ. 
 
 
 ## Installation
@@ -10,28 +10,28 @@ Build and install the tool:
 ```bash
 dotnet build
 dotnet pack
-dotnet tool install --global --add-source ./nupkg rmqctl
+dotnet tool install --global --add-source ./nupkg rmq
 ```
 
 ## Configuration
 
-`rmqctl` uses TOML configuration files following standard CLI tool conventions. Configuration is loaded in the following priority order (highest priority wins):
+`rmq` uses TOML configuration files following standard CLI tool conventions. Configuration is loaded in the following priority order (highest priority wins):
 
-1. Environment variables (prefixed with `RMQCTL_`)
+1. Environment variables (prefixed with `RMQCLI_`)
 2. Custom config file (via `--config` flag)
-3. User config file: `~/.config/rmqctl/config.toml`
-4. System-wide config file: `/etc/rmqctl/config.toml`
+3. User config file: `~/.config/rmq/config.toml`
+4. System-wide config file: `/etc/rmq/config.toml`
 
 ### Default Configuration
 
-On first run, `rmqctl` automatically creates a default configuration file at `~/.config/rmqctl/config.toml`.
+On first run, `rmq` automatically creates a default configuration file at `~/.config/rmq/config.toml`.
 
 ### Configuration File Locations
 
-- **Linux/macOS**: `~/.config/rmqctl/config.toml`
-- **Windows**: `%APPDATA%/rmqctl/config.toml`
-- **System-wide (Linux/macOS)**: `/etc/rmqctl/config.toml`
-- **System-wide (Windows)**: `%PROGRAMDATA%/rmqctl/config.toml`
+- **Linux/macOS**: `~/.config/rmq/config.toml`
+- **Windows**: `%APPDATA%/rmq/config.toml`
+- **System-wide (Linux/macOS)**: `/etc/rmq/config.toml`
+- **System-wide (Windows)**: `%PROGRAMDATA%/rmq/config.toml`
 
 ### Configuration Management
 
@@ -39,35 +39,35 @@ Use the built-in configuration commands to manage your settings:
 
 ```bash
 # Show configuration file location
-rmqctl config path
+rmq config path
 
 # Display current configuration
-rmqctl config show
+rmq config show
 
 # Open configuration in default editor
-rmqctl config edit
+rmq config edit
 
 # Reset configuration to defaults
-rmqctl config reset
+rmq config reset
 
 # Use a custom configuration file
-rmqctl --config /path/to/custom-config.toml <command>
+rmq --config /path/to/custom-config.toml <command>
 ```
 
 ### Environment Variables
 
-Override any configuration setting using environment variables with the `RMQCTL_` prefix:
+Override any configuration setting using environment variables with the `RMQCLI_` prefix:
 
 ```bash
 # Override RabbitMQ host
-export RMQCTL_RabbitMqConfig__Host=production-rabbit
+export RMQCLI_RabbitMqConfig__Host=production-rabbit
 
 # Override port
-export RMQCTL_RabbitMqConfig__Port=5673
+export RMQCLI_RabbitMqConfig__Port=5673
 
 # Override user credentials
-export RMQCTL_RabbitMqConfig__User=myuser
-export RMQCTL_RabbitMqConfig__Password=mypassword
+export RMQCLI_RabbitMqConfig__User=myuser
+export RMQCLI_RabbitMqConfig__Password=mypassword
 ```
 
 Note: Use double underscores (`__`) to represent nested configuration sections.
@@ -78,23 +78,23 @@ Note: Use double underscores (`__`) to represent nested configuration sections.
 
 ```bash
 # Publish a simple text message
-rmqctl publish --queue myqueue --message "Hello, World!"
+rmq publish --queue myqueue --message "Hello, World!"
 
 # Publish from a file
-rmqctl publish --queue myqueue --file message.txt
+rmq publish --queue myqueue --file message.txt
 
 # Use custom RabbitMQ settings
-rmqctl --config production-config.toml publish --queue myqueue --message "Hello"
+rmq --config production-config.toml publish --queue myqueue --message "Hello"
 ```
 
 ### Consuming Messages
 
 ```bash
 # Consume messages and display to console
-rmqctl consume --queue myqueue
+rmq consume --queue myqueue
 
 # Consume messages and save to file
-rmqctl consume --queue myqueue --output file --file messages.txt
+rmq consume --queue myqueue --output file --file messages.txt
 ```
 
 ## Development
