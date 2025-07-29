@@ -40,17 +40,18 @@ public class PublishService : IPublishService
             var totalMessageCount = messages.Count * burstCount;
             var messageCountString = $"[orange1]{totalMessageCount}[/] message{(totalMessageCount > 1 ? "s" : string.Empty)}";
 
-            AnsiConsole.MarkupLine($"\u26EF Publishing {messageCountString} to {GetDestinationString(dest, true)}...");
+            // Status output
+            AnsiConsole.MarkupLine($"\u26EF Publishing {messageCountString} to {GetDestinationString(dest)}...");
 
             var publishResults = new List<PublishResult>();
 
             var messageBaseId = GetMessageId();
             for (var m = 0; m < messages.Count; m++)
             {
-                var messageIdSuffix = "-" + $"{m + 1}".PadLeft(OutputUtilities.GetDigitCount(messages.Count), '0');
+                var messageIdSuffix = GetMessageIdSuffix(m + 1, messages.Count);
                 for (var i = 0; i < burstCount; i++)
                 {
-                    var burstSuffix = burstCount > 1 ? "-" + $"{i + 1}".PadLeft(OutputUtilities.GetDigitCount(burstCount), '0') : string.Empty;
+                    var burstSuffix = burstCount > 1 ? GetMessageIdSuffix(i + 1, burstCount) : string.Empty;
                     var result = await Publish(
                         channel: channel,
                         message: messages[m],
@@ -62,45 +63,51 @@ public class PublishService : IPublishService
                 }
             }
 
+            // Success output
             AnsiConsole.MarkupLine($"✓ Published {messageCountString} successfully");
 
+            // Result output
             if (dest.Queue is not null)
             {
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Queue:       {dest.Queue}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  Queue:       {dest.Queue}");
             }
             else if (dest is { Exchange: not null, RoutingKey: not null })
             {
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Exchange:    {dest.Exchange}[/]");
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Routing Key: {dest.RoutingKey}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  Exchange:    {dest.Exchange}");
+                AnsiConsole.MarkupLineInterpolated($"  Routing Key: {dest.RoutingKey}");
             }
 
             if (totalMessageCount > 1)
             {
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Message IDs: {publishResults[0].MessageId} → {publishResults[^1].MessageId}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  Message IDs: {publishResults[0].MessageId} → {publishResults[^1].MessageId}");
 
                 var avgSize = Math.Round(publishResults.Sum(m => m.MessageLength) / (double)totalMessageCount, 2);
                 var avgSizeString = OutputUtilities.ToSizeString(avgSize);
                 var totalSizeString = OutputUtilities.ToSizeString(publishResults.Sum(m => m.MessageLength));
 
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Size:        {avgSizeString} avg. ({totalSizeString} total)[/]");
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Time:        {publishResults[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff} → {publishResults[^1].Timestamp:yyyy-MM-dd HH:mm:ss.fff}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  Size:        {avgSizeString} avg. ({totalSizeString} total)");
+                AnsiConsole.MarkupLineInterpolated(
+                    $"  Time:        {publishResults[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff} → {publishResults[^1].Timestamp:yyyy-MM-dd HH:mm:ss.fff}");
             }
             else
             {
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Message ID:  {publishResults[0].MessageId}[/]");
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Size:        {publishResults[0].MessageSize}[/]");
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Time:        {publishResults[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  Message ID:  {publishResults[0].MessageId}");
+                AnsiConsole.MarkupLineInterpolated($"  Size:        {publishResults[0].MessageSize}");
+                AnsiConsole.MarkupLineInterpolated($"  Time:        {publishResults[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff}");
             }
         }
         catch (AlreadyClosedException ex)
         {
             if (ex.ShutdownReason?.ReplyCode == 404)
             {
-                AnsiConsole.MarkupLine($"✗ Failed to publish to {GetDestinationString(dest, true)}: Exchange not found.");
+                // Error output
+                AnsiConsole.MarkupLine($"✗ Failed to publish to {GetDestinationString(dest)}: Exchange not found.");
                 _logger.LogWarning("Publishing failed with 404 shutdown reason: {Message}", ex.Message);
                 return;
             }
 
+            // Error output
+            AnsiConsole.MarkupLine($"✗ Failed to publish to {GetDestinationString(dest)}: {TextFormatters.EscapeMarkup(ex.Message)}");
             _logger.LogWarning(ex, "Publishing failed. Channel was already closed, but not due to a 404 error.");
             throw;
         }
@@ -108,15 +115,20 @@ public class PublishService : IPublishService
         {
             if (ex.IsReturn)
             {
-                AnsiConsole.MarkupLine($"✗ Failed to publish to {GetDestinationString(dest, true)}: No route to destination.");
+                // Error output
+                AnsiConsole.MarkupLine($"✗ Failed to publish to {GetDestinationString(dest)}: No route to destination.");
                 _logger.LogDebug(ex, "Caught publish exception due to 'basic.return'");
                 return;
             }
 
+            // Error output
+            AnsiConsole.MarkupLine($"✗ Failed to publish to {GetDestinationString(dest)}: {TextFormatters.EscapeMarkup(ex.Message)}");
             _logger.LogError(ex, "Publishing failed but no due to 'basic.return'");
             throw;
         }
     }
+
+
 
     public async Task PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default)
     {
@@ -135,12 +147,13 @@ public class PublishService : IPublishService
             '\t' => "\\t",
             _ => c.ToString()
         }));
-        _logger.LogDebug("Read {MessageCount} messages: file='{FilePath}', msg-delimiter='{MessageDelimiter}'", messages.Count, fileInfo.FullName, delimiterDisplay);
+        _logger.LogDebug("Read {MessageCount} messages: file='{FilePath}', msg-delimiter='{MessageDelimiter}'", messages.Count, fileInfo.FullName,
+            delimiterDisplay);
 
         await PublishMessage(dest, messages, burstCount, cancellationToken);
     }
 
-    private static string GetDestinationString(Destination dest, bool useColor = false)
+    private static string GetDestinationString(Destination dest, bool useColor = true)
     {
         var colorPrefix = useColor ? "[orange1]" : string.Empty;
         var colorSuffix = useColor ? "[/]" : string.Empty;
@@ -187,18 +200,21 @@ public class PublishService : IPublishService
     /// Generates a unique message ID.
     /// </summary>
     /// <example>msg-e3955d32-5461</example>
-    /// <returns></returns>
+    /// <returns>Message ID</returns>
     private static string GetMessageId()
     {
         return $"msg-{Guid.NewGuid().ToString("D")[..13]}";
     }
-
-    private record PublishResult(
-        string MessageId,
-        long MessageLength,
-        AmqpTimestamp AmqTime)
+    
+    /// <summary>
+    /// Generates a suffix for the message ID based on the message index and total messages.
+    /// </summary>
+    /// <param name="messageIndex"></param>
+    /// <param name="totalMessages"></param>
+    /// <example>-001</example>
+    /// <returns>Message ID suffix</returns>
+    private static string GetMessageIdSuffix(int messageIndex, int totalMessages)
     {
-        public string MessageSize => OutputUtilities.ToSizeString(MessageLength);
-        public DateTimeOffset Timestamp => DateTimeOffset.FromUnixTimeSeconds(AmqTime.UnixTime);
+        return "-" + $"{messageIndex + 1}".PadLeft(OutputUtilities.GetDigitCount(totalMessages), '0');
     }
 }
