@@ -65,7 +65,7 @@ if (File.Exists(customConfigPath))
 {
     builder.Configuration.AddTomlConfig(customConfigPath);
 }
-else
+else if (!string.IsNullOrEmpty(customConfigPath))
 {
     // TODO: User logger and add user-friendly error message
     Console.Error.WriteLine("Configuration file not found. Using default configuration.");

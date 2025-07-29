@@ -11,7 +11,7 @@ namespace rmqctl.Services;
 
 public interface IPublishService
 {
-    Task PublishMessage(Destination dest, string message, int burstCount = 1, CancellationToken cancellationToken = default);
+    Task PublishMessage(Destination dest, List<string> message, int burstCount = 1, CancellationToken cancellationToken = default);
     Task PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default);
 }
 
@@ -28,34 +28,40 @@ public class PublishService : IPublishService
         _fileConfig = fileConfig;
     }
 
-    public async Task PublishMessage(Destination dest, string message, int burstCount = 1, CancellationToken cancellationToken = default)
+    public async Task PublishMessage(Destination dest, List<string> messages, int burstCount = 1, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
-            "Initiating publish operation: exchange={Exchange}, routing-key={RoutingKey}, queue={Queue}, messageLength={Length}, burstCount={Count}",
-            dest.Exchange, dest.RoutingKey, dest.Queue, message.Length, burstCount);
+            "Initiating publish operation: exchange={Exchange}, routing-key={RoutingKey}, queue={Queue}, msg-count={MessageCount}, burst-count={BurstCount}",
+            dest.Exchange, dest.RoutingKey, dest.Queue, messages.Count, burstCount);
         try
         {
             await using var channel = await _rabbitChannelFactory.GetChannelWithPublisherConfirmsAsync();
 
-            AnsiConsole.MarkupLine(
-                $"\u26EF Publishing [orange1]{burstCount}[/] message{(burstCount > 1 ? "s" : string.Empty)} to {GetDestinationString(dest, true)}...");
+            var totalMessageCount = messages.Count * burstCount;
+            var messageCountString = $"[orange1]{totalMessageCount}[/] message{(totalMessageCount > 1 ? "s" : string.Empty)}";
+
+            AnsiConsole.MarkupLine($"\u26EF Publishing {messageCountString} to {GetDestinationString(dest, true)}...");
+
+            var publishResults = new List<PublishResult>();
 
             var messageBaseId = GetMessageId();
-            var results = new List<PublishResult>();
-            for (int i = 0; i < burstCount; i++)
+            for (var m = 0; m < messages.Count; m++)
             {
-                var messageId = burstCount > 1 ? "-" + $"{i + 1}".PadLeft(OutputUtilities.GetDigitCount(burstCount), '0') : string.Empty;
-                var result = await Publish(
-                    channel: channel,
-                    message: message,
-                    messageId: $"{messageBaseId}{messageId}",
-                    exchange: dest.Exchange ?? string.Empty,
-                    routingKey: dest.Queue ?? dest.RoutingKey ?? string.Empty,
-                    cancellationToken: cancellationToken);
-                results.Add(result);
+                var messageIdSuffix = "-" + $"{m + 1}".PadLeft(OutputUtilities.GetDigitCount(messages.Count), '0');
+                for (var i = 0; i < burstCount; i++)
+                {
+                    var burstSuffix = burstCount > 1 ? "-" + $"{i + 1}".PadLeft(OutputUtilities.GetDigitCount(burstCount), '0') : string.Empty;
+                    var result = await Publish(
+                        channel: channel,
+                        message: messages[m],
+                        messageId: $"{messageBaseId}{messageIdSuffix}{burstSuffix}",
+                        exchange: dest.Exchange ?? string.Empty,
+                        routingKey: dest.Queue ?? dest.RoutingKey ?? string.Empty,
+                        cancellationToken: cancellationToken);
+                    publishResults.Add(result);
+                }
             }
 
-            var messageCountString = burstCount > 1 ? $"[orange1]{burstCount}[/] messages" : "message";
             AnsiConsole.MarkupLine($"✓ Published {messageCountString} successfully");
 
             if (dest.Queue is not null)
@@ -68,19 +74,22 @@ public class PublishService : IPublishService
                 AnsiConsole.MarkupLineInterpolated($"  [dim]Routing Key: {dest.RoutingKey}[/]");
             }
 
-            if (burstCount > 1)
+            if (totalMessageCount > 1)
             {
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Message IDs: {results[0].MessageId} → {results[^1].MessageId}[/]");
-                AnsiConsole.MarkupLineInterpolated(
-                    $"  [dim]Size:        {results[0].MessageSize} each ({OutputUtilities.ToSizeString(results[0].MessageLength * burstCount)} total)[/]");
-                AnsiConsole.MarkupLineInterpolated(
-                    $"  [dim]Time:        {results[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff} → {results[^1].Timestamp:yyyy-MM-dd HH:mm:ss.fff}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  [dim]Message IDs: {publishResults[0].MessageId} → {publishResults[^1].MessageId}[/]");
+
+                var avgSize = Math.Round(publishResults.Sum(m => m.MessageLength) / (double)totalMessageCount, 2);
+                var avgSizeString = OutputUtilities.ToSizeString(avgSize);
+                var totalSizeString = OutputUtilities.ToSizeString(publishResults.Sum(m => m.MessageLength));
+
+                AnsiConsole.MarkupLineInterpolated($"  [dim]Size:        {avgSizeString} avg. ({totalSizeString} total)[/]");
+                AnsiConsole.MarkupLineInterpolated($"  [dim]Time:        {publishResults[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff} → {publishResults[^1].Timestamp:yyyy-MM-dd HH:mm:ss.fff}[/]");
             }
             else
             {
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Message ID:  {results[0].MessageId}[/]");
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Size:        {results[0].MessageSize}[/]");
-                AnsiConsole.MarkupLineInterpolated($"  [dim]Time:        {results[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  [dim]Message ID:  {publishResults[0].MessageId}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  [dim]Size:        {publishResults[0].MessageSize}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  [dim]Time:        {publishResults[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff}[/]");
             }
         }
         catch (AlreadyClosedException ex)
@@ -108,19 +117,27 @@ public class PublishService : IPublishService
             throw;
         }
     }
-    
+
     public async Task PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Reading message from file: {FilePath}", fileInfo.FullName);
         var messageBlob = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken);
-        // TDOO: Adjust publish logic to handle multiple messages in a single file
-        // var messages = messageBlob
-        //     .Split(_fileConfig.MessageDelimiter)
-        //     .Select(m => m.Trim())
-        //     .Where(m => !string.IsNullOrWhiteSpace(m))
-        //     .ToList();
+        var messages = messageBlob
+            .Split(_fileConfig.MessageDelimiter)
+            .Select(m => m.Trim())
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .ToList();
 
-        await PublishMessage(dest, messageBlob, burstCount, cancellationToken);
+        var delimiterDisplay = string.Join("", _fileConfig.MessageDelimiter.Select(c => c switch
+        {
+            '\r' => "\\r",
+            '\n' => "\\n",
+            '\t' => "\\t",
+            _ => c.ToString()
+        }));
+        _logger.LogDebug("Read {MessageCount} messages: file='{FilePath}', msg-delimiter='{MessageDelimiter}'", messages.Count, fileInfo.FullName, delimiterDisplay);
+
+        await PublishMessage(dest, messages, burstCount, cancellationToken);
     }
 
     private static string GetDestinationString(Destination dest, bool useColor = false)
@@ -165,7 +182,12 @@ public class PublishService : IPublishService
 
         return new PublishResult(props.MessageId, body.LongLength, props.Timestamp);
     }
-    
+
+    /// <summary>
+    /// Generates a unique message ID.
+    /// </summary>
+    /// <example>msg-e3955d32-5461</example>
+    /// <returns></returns>
     private static string GetMessageId()
     {
         return $"msg-{Guid.NewGuid().ToString("D")[..13]}";

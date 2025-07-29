@@ -115,7 +115,7 @@ public class PublishCommandHandler : ICommandHandler
         }
         else
         {
-            await _publishService.PublishMessage(dest, message, burstCount, cts.Token);
+            await _publishService.PublishMessage(dest, [message], burstCount, cts.Token);
         }
     }
 }

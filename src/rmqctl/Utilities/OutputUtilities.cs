@@ -2,7 +2,7 @@ namespace rmqctl.Utilities;
 
 public static class OutputUtilities
 {
-    public static string ToSizeString(long l)
+    public static string ToSizeString(double l)
     {
         const long kb = 1024;
         const long mb = kb * 1024;
@@ -11,13 +11,13 @@ public static class OutputUtilities
         switch (l)
         {
             case >= gb:
-                size = Math.Round((double)l / gb, 2);
+                size = Math.Round(l / gb, 2);
                 return $"{size} GB";
             case >= mb:
-                size = Math.Round((double)l / mb, 2);
+                size = Math.Round(l / mb, 2);
                 return $"{size} MB";
             case >= kb:
-                size = Math.Round((double)l / kb, 2);
+                size = Math.Round(l / kb, 2);
                 return $"{size} KB";
             default:
                 return $"{size} bytes";
