@@ -3,11 +3,15 @@
   "profiles": {
     "consume": {
       "commandName": "Project",
-      "commandLineArgs": "consume -q test-queue -c 1 -o json --config rmqctl.toml"
+      "commandLineArgs": "consume -q test-queue -c 1 -o json"
     },
     "publish": {
       "commandName": "Project",
-      "commandLineArgs": "publish -q test-queue -m loool --config rmqctl.toml"
+      "commandLineArgs": "publish -q test-queue -m loool -b 20"
+    },
+    "publish-from-file": {
+      "commandName": "Project",
+      "commandLineArgs": "publish -q test-queue --from-file ../../../../../../test.txt"
     }
   }
 }
