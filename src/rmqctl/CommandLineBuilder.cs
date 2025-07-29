@@ -15,7 +15,7 @@ public class CommandLineBuilder
                                          (-.-)
                                          o(")(")
                                        """;
-    
+
     public CommandLineBuilder(IHost host)
     {
         _host = host;
@@ -35,10 +35,25 @@ public class CommandLineBuilder
 
     private void ConfigureGlobalOptions()
     {
-        // TODO: handle this option
+        // TODO: handle output related options
+        // ILogger -> stderr (technical diagnostics, enable with --verbose)
+        // AnsiConsole -> stderr (user-friendly output)
+        // (Json)Console -> stdout for results(structured output for automation)
         var verboseOption = new Option<bool>("--verbose", "Enable verbose logging");
         verboseOption.SetDefaultValue(false);
         _rootCommand.AddGlobalOption(verboseOption);
+
+        var quietOption = new Option<bool>("--quiet", "Minimal output (errors only)");
+        quietOption.SetDefaultValue(false);
+        _rootCommand.AddGlobalOption(quietOption);
+
+        var jsonOption = new Option<bool>("--json", "Structured JSON output to stdout");
+        jsonOption.SetDefaultValue(false);
+        _rootCommand.AddGlobalOption(jsonOption);
+
+        var noColorOption = new Option<bool>("--no-color", "Disable colored output for dumb terminals");
+        noColorOption.SetDefaultValue(false);
+        _rootCommand.AddGlobalOption(noColorOption);
 
         var configFileOption = new Option<string>("--config", "Path to the configuration file (TOML format)");
         configFileOption.SetDefaultValue("~/config/rmqctl/config.toml");
