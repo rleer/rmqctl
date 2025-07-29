@@ -5,11 +5,11 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{30C814F0-7926-4C9A-B672-36CA76BC1B2E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "rmqctl", "src\rmqctl\rmqctl.csproj", "{82DD870D-DD37-40C9-B19B-32040BBB52B9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RmqCli", "src\RmqCli\RmqCli.csproj", "{82DD870D-DD37-40C9-B19B-32040BBB52B9}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{2518B246-DEC6-40F3-9A31-252638D0CE95}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "rmqctl.Test.Xunit", "test\rmqctl.Test.Xunit\rmqctl.Test.Xunit.csproj", "{DCE8D476-5642-4D91-934E-96455DDA4633}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RmqCli.Test.Xunit", "test\RmqCli.Test.Xunit\RmqCli.Test.Xunit.csproj", "{DCE8D476-5642-4D91-934E-96455DDA4633}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
