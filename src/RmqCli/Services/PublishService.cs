@@ -48,10 +48,10 @@ public class PublishService : IPublishService
             var messageBaseId = GetMessageId();
             for (var m = 0; m < messages.Count; m++)
             {
-                var messageIdSuffix = GetMessageIdSuffix(m + 1, messages.Count);
+                var messageIdSuffix = GetMessageIdSuffix(m, messages.Count);
                 for (var i = 0; i < burstCount; i++)
                 {
-                    var burstSuffix = burstCount > 1 ? GetMessageIdSuffix(i + 1, burstCount) : string.Empty;
+                    var burstSuffix = burstCount > 1 ? GetMessageIdSuffix(i, burstCount) : string.Empty;
                     var result = await Publish(
                         channel: channel,
                         message: messages[m],
