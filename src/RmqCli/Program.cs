@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.CommandLine;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -10,25 +11,27 @@ using RmqCli.MessageWriter;
 using RmqCli.Services;
 using Spectre.Console;
 
-// Parse command line arguments early to get configuration file path
-string? customConfigPath = null;
-var verboseLogging = false;
+// Create a minimal root command to parse global options first
+var tempRootCommand = new RootCommand();
+var configOption = new Option<string>("--config", "Path to the configuration file (TOML format)");
+var verboseOption = new Option<bool>("--verbose", () => false, "Enable verbose logging");
+var quietOption = new Option<bool>("--quiet", () => false, "Minimal output (errors only)");
+var jsonOption = new Option<bool>("--json", () => false, "Structured JSON output to stdout");
+var noColorOption = new Option<bool>("--no-color", () => false, "Disable colored output for dumb terminals");
 
-// Simple command line argument parsing to find the custom config path
-for (var i = 0; i < args.Length; i++)
-{
-    if (args[i] == "--config")
-    {
-        if (i + 1 < args.Length)
-        {
-            customConfigPath = args[i + 1];
-        }
-    }
-    if (args[i] == "--verbose")
-    {
-        verboseLogging = true;
-    }
-}
+tempRootCommand.AddGlobalOption(configOption);
+tempRootCommand.AddGlobalOption(verboseOption);
+tempRootCommand.AddGlobalOption(quietOption);
+tempRootCommand.AddGlobalOption(jsonOption);
+tempRootCommand.AddGlobalOption(noColorOption);
+
+// Parse arguments to extract global option values
+var parseResult = tempRootCommand.Parse(args);
+var customConfigPath = parseResult.GetValueForOption(configOption);
+var verboseLogging = parseResult.GetValueForOption(verboseOption);
+var quietLogging = parseResult.GetValueForOption(quietOption);
+var jsonOutput = parseResult.GetValueForOption(jsonOption);
+var noColor = parseResult.GetValueForOption(noColorOption);
 
 // TODO: Replace with manual DI container and configuration setup to avoid potential overhead of using Host
 var builder = Host.CreateApplicationBuilder();
@@ -60,7 +63,6 @@ if (File.Exists(userConfigPath))
 }
 
 // Add custom configuration file if specified
-// TODO: Prompt user if file does not exist and fallback to default config is used
 if (File.Exists(customConfigPath))
 {
     builder.Configuration.AddTomlConfig(customConfigPath);
@@ -77,14 +79,11 @@ builder.Configuration.AddEnvironmentVariables("RMQCLI_");
 builder.Logging.ClearProviders();
 
 var logLevel = verboseLogging ? LogLevel.Debug : LogLevel.None;
-// TODO: Set minimum log level later to avoid early parsing of arguments
 builder.Logging.AddConsole(options => { options.LogToStandardErrorThreshold = LogLevel.Trace; })
     .AddFilter("Microsoft", LogLevel.Warning)
     .AddFilter("System", LogLevel.Warning)
     .SetMinimumLevel(logLevel);
 
-// TODO: Replace with own logger formatter
-// [14:54:42 DEBUG] 
 builder.Logging.AddSimpleConsole(options =>
 {
     options.SingleLine = true;
@@ -101,6 +100,14 @@ var fileConfig = new FileConfig();
 builder.Configuration.GetSection(nameof(FileConfig)).Bind(fileConfig);
 builder.Services.AddSingleton(fileConfig);
 
+var cliConfig = new CliConfig
+{
+    JsonOutput = jsonOutput,
+    Quiet = quietLogging,
+    Verbose = verboseLogging,
+    NoColor = noColor
+};
+builder.Services.AddSingleton(cliConfig);
 
 // Register services in the DI container
 builder.Services.AddSingleton<IRabbitChannelFactory, RabbitChannelFactory>();
@@ -130,7 +137,7 @@ var logger = host.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
-    // Configure commands
+    // Configure commands with the properly configured host
     var commandLineBuilder = new CommandLineBuilder(host);
     commandLineBuilder.ConfigureCommands();
 

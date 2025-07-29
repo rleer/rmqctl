@@ -35,10 +35,8 @@ public class CommandLineBuilder
 
     private void ConfigureGlobalOptions()
     {
-        // TODO: handle output related options
-        // ILogger -> stderr (technical diagnostics, enable with --verbose)
-        // AnsiConsole -> stderr (user-friendly output)
-        // (Json)Console -> stdout for results(structured output for automation)
+        // Global options are parsed first in Program.cs to set up the environment and also need to be specified here
+        // for help text and property validation.
         var verboseOption = new Option<bool>("--verbose", "Enable verbose logging");
         verboseOption.SetDefaultValue(false);
         _rootCommand.AddGlobalOption(verboseOption);
@@ -56,8 +54,15 @@ public class CommandLineBuilder
         _rootCommand.AddGlobalOption(noColorOption);
 
         var configFileOption = new Option<string>("--config", "Path to the configuration file (TOML format)");
-        configFileOption.SetDefaultValue("~/config/rmq/config.toml");
         _rootCommand.AddGlobalOption(configFileOption);
+        
+        _rootCommand.AddValidator(result =>
+        {
+            if (result.GetValueForOption(verboseOption) && result.GetValueForOption(quietOption))
+            {
+                result.ErrorMessage = "You cannot use both --verbose and --quiet options together.";
+            }
+        });
     }
 
     public async Task<int> RunAsync(string[] args)
