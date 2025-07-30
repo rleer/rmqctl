@@ -94,9 +94,12 @@ public class PublishService : IPublishService
             _logger.LogError(ex, "Publishing failed but not due to 'basic.return'");
             throw;
         }
+        finally
+        {
+            await channel.CloseAsync(cancellationToken: cancellationToken);
+            await _rabbitChannelFactory.CloseConnectionAsync();
+        }
     }
-
-
 
     public async Task PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default)
     {
