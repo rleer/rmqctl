@@ -6,6 +6,7 @@ using RabbitMQ.Client.Exceptions;
 using RmqCli.Configuration;
 using RmqCli.Models;
 using RmqCli.Utilities;
+using Spectre.Console;
 
 namespace RmqCli.Services;
 
@@ -59,23 +60,40 @@ public partial class PublishService : IPublishService
             _output.ShowStatus($"Publishing {messageCountString} to {GetDestinationString(dest)}...");
 
             var messageBaseId = GetMessageId();
-            for (var m = 0; m < messages.Count; m++)
-            {
-                var messageIdSuffix = GetMessageIdSuffix(m, messages.Count);
-                for (var i = 0; i < burstCount; i++)
+
+            await AnsiConsole.Progress()
+                .AutoClear(true)
+                .HideCompleted(true)
+                .Columns(new ProgressColumn[]
                 {
-                    await Task.Delay(1000);
-                    var burstSuffix = burstCount > 1 ? GetMessageIdSuffix(i, burstCount) : string.Empty;
-                    var result = await Publish(
-                        channel: channel,
-                        message: messages[m],
-                        messageId: $"{messageBaseId}{messageIdSuffix}{burstSuffix}",
-                        exchange: dest.Exchange ?? string.Empty,
-                        routingKey: dest.Queue ?? dest.RoutingKey ?? string.Empty,
-                        cancellationToken: cancellationToken);
-                    publishResults.Add(result);
+                    new SpinnerColumn(Spinner.Known.Dots),
+                    new TaskDescriptionColumn(),
+                    new ProgressBarColumn(),
+                    new PercentageColumn()
+                })
+                .StartAsync(async ctx =>
+            {
+                var progress = ctx.AddTask("Publishing messages", maxValue: totalMessageCount);
+                
+                for (var m = 0; m < messages.Count; m++)
+                {
+                    var messageIdSuffix = GetMessageIdSuffix(m, messages.Count);
+                    for (var i = 0; i < burstCount; i++)
+                    {
+                        await Task.Delay(1000);
+                        var burstSuffix = burstCount > 1 ? GetMessageIdSuffix(i, burstCount) : string.Empty;
+                        var result = await Publish(
+                            channel: channel,
+                            message: messages[m],
+                            messageId: $"{messageBaseId}{messageIdSuffix}{burstSuffix}",
+                            exchange: dest.Exchange ?? string.Empty,
+                            routingKey: dest.Queue ?? dest.RoutingKey ?? string.Empty,
+                            cancellationToken: cancellationToken);
+                        publishResults.Add(result);
+                        progress.Increment(1); 
+                    }
                 }
-            }
+            });
 
             _output.ShowSuccess($"Published {messageCountString} successfully");
 
