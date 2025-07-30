@@ -11,8 +11,9 @@ namespace RmqCli.Services;
 
 public interface IPublishService
 {
-    Task<int> PublishMessage(Destination dest, List<string> message, int burstCount = 1, CancellationToken cancellationToken = default);
+    Task<int> PublishMessage(Destination dest, List<string> messages, int burstCount = 1, CancellationToken cancellationToken = default);
     Task<int> PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default);
+    Task<int> PublishMessageFromStdin(Destination dest, int burstCount = 1, CancellationToken cancellationToken = default);
 }
 
 public partial class PublishService : IPublishService
@@ -152,14 +153,38 @@ public partial class PublishService : IPublishService
 
     public async Task<int> PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Reading message(s) from file: {FilePath}", fileInfo.FullName);
+        _logger.LogDebug("Reading messages from file: {FilePath}", fileInfo.FullName);
         var messageBlob = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken);
+        
+        var (messages, delimiterDisplay) = SplitMessages(messageBlob);
+
+        _logger.LogDebug("Read {MessageCount} messages: source='{FilePath}', msg-delimiter='{MessageDelimiter}'", messages.Count, fileInfo.FullName,
+            delimiterDisplay);
+
+        return await PublishMessage(dest, messages, burstCount, cancellationToken);
+    }
+
+    public async Task<int> PublishMessageFromStdin(Destination dest, int burstCount = 1, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Reading messages from standard input (STDIN)");
+        var messageBlob = await Console.In.ReadToEndAsync(cancellationToken);
+        
+        var (messages, delimiterDisplay) = SplitMessages(messageBlob);
+        
+        _logger.LogDebug("Read {MessageCount} messages: source:'STDIN', msg-delimiter='{MessageDelimiter}'", messages.Count,
+            delimiterDisplay); 
+        
+        return await PublishMessage(dest, messages, burstCount, cancellationToken);
+    }
+
+    private (List<string> messags, string delimiterDisplay) SplitMessages(string messageBlob)
+    {
         var messages = messageBlob
             .Split(_fileConfig.MessageDelimiter)
             .Select(m => m.Trim())
             .Where(m => !string.IsNullOrWhiteSpace(m))
             .ToList();
-
+        
         var delimiterDisplay = string.Join("", _fileConfig.MessageDelimiter.Select(c => c switch
         {
             '\r' => "\\r",
@@ -167,10 +192,7 @@ public partial class PublishService : IPublishService
             '\t' => "\\t",
             _ => c.ToString()
         }));
-        _logger.LogDebug("Read {MessageCount} message(s): file='{FilePath}', msg-delimiter='{MessageDelimiter}'", messages.Count, fileInfo.FullName,
-            delimiterDisplay);
-
-        return await PublishMessage(dest, messages, burstCount, cancellationToken);
+        return (messages, delimiterDisplay);
     }
 
     private static string GetDestinationString(Destination dest, bool useColor = true)

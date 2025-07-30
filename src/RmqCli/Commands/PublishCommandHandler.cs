@@ -70,9 +70,9 @@ public class PublishCommandHandler : ICommandHandler
                 result.ErrorMessage = "Routing key cannot be empty. Consider using the --queue option if you want to send messages directly to a queue.";
             }
 
-            if (result.GetValueForOption(messageOption) is null && result.GetValueForOption(fromFileOption) is null)
+            if (result.GetValueForOption(messageOption) is null && result.GetValueForOption(fromFileOption) is null && !Console.IsInputRedirected)
             {
-                result.ErrorMessage = "You must specify a message to send or a file that contains the message body.";
+                result.ErrorMessage = "You must specify a message using --message, --from-file, or pipe input to STDIN.";
             }
 
             if (result.GetValueForOption(fromFileOption) is not null && result.GetValueForOption(messageOption) is not null)
@@ -99,7 +99,7 @@ public class PublishCommandHandler : ICommandHandler
 
     private async Task<int> Handle(Destination dest, string message, string filePath, int burstCount)
     {
-        _logger.LogDebug("Running handler for publish command...");
+        _logger.LogDebug("Running handler for publish command");
 
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
@@ -116,6 +116,11 @@ public class PublishCommandHandler : ICommandHandler
                 return await _publishService.PublishMessageFromFile(dest, fileInfo, burstCount, cts.Token);
             }
 
+            if (Console.IsInputRedirected)
+            {
+                return await _publishService.PublishMessageFromStdin(dest, burstCount, cts.Token);
+            }
+
             return await _publishService.PublishMessage(dest, [message], burstCount, cts.Token);
         }
         catch (OperationCanceledException)
@@ -126,7 +131,7 @@ public class PublishCommandHandler : ICommandHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish message");
-            return 1; // Error exit code
+            return 1;
         }
     }
 }
