@@ -34,16 +34,18 @@ public class PublishService : IPublishService
         _logger.LogDebug(
             "Initiating publish operation: exchange={Exchange}, routing-key={RoutingKey}, queue={Queue}, msg-count={MessageCount}, burst-count={BurstCount}",
             dest.Exchange, dest.RoutingKey, dest.Queue, messages.Count, burstCount);
+
+        await using var channel = await _rabbitChannelFactory.GetChannelWithPublisherConfirmsAsync();
+
+        var totalMessageCount = messages.Count * burstCount;
+        var messageCountString = $"[orange1]{totalMessageCount}[/] message{(totalMessageCount > 1 ? "s" : string.Empty)}";
+        
+        // Prepare the list to collect publish results
+        var publishResults = new List<PublishResult>();
+        
         try
         {
-            await using var channel = await _rabbitChannelFactory.GetChannelWithPublisherConfirmsAsync();
-
-            var totalMessageCount = messages.Count * burstCount;
-            var messageCountString = $"[orange1]{totalMessageCount}[/] message{(totalMessageCount > 1 ? "s" : string.Empty)}";
-
             // Status output
-
-            var publishResults = new List<PublishResult>();
             _output.ShowStatus($"Publishing {messageCountString} to {GetDestinationString(dest)}...");
 
             var messageBaseId = GetMessageId();
@@ -52,6 +54,7 @@ public class PublishService : IPublishService
                 var messageIdSuffix = GetMessageIdSuffix(m, messages.Count);
                 for (var i = 0; i < burstCount; i++)
                 {
+                    await Task.Delay(1000);
                     var burstSuffix = burstCount > 1 ? GetMessageIdSuffix(i, burstCount) : string.Empty;
                     var result = await Publish(
                         channel: channel,
@@ -93,6 +96,21 @@ public class PublishService : IPublishService
             _output.ShowError($"Failed to publish to {GetDestinationString(dest)}", ex.Message);
             _logger.LogError(ex, "Publishing failed but not due to 'basic.return'");
             throw;
+        }
+        catch (OperationCanceledException)
+        {
+            _output.ShowWarning("Publishing cancelled by user", addNewLine: true);
+            
+            var publishCount = publishResults.Count;
+            if (publishCount > 0)
+            {
+                _output.ShowSuccess($"Published [orange1]{publishCount}[/] message{(publishCount > 1 ? "s" : string.Empty)} successfully before cancellation");
+                _output.WritePublishResult(dest, publishResults);
+            }
+            else
+            {
+                _output.ShowStatus("No messages were published before cancellation");
+            }
         }
         finally
         {

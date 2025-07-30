@@ -97,7 +97,7 @@ public class PublishCommandHandler : ICommandHandler
         rootCommand.AddCommand(publishCommand);
     }
 
-    private async Task Handle(Destination dest, string message, string filePath, int burstCount)
+    private async Task<int> Handle(Destination dest, string message, string filePath, int burstCount)
     {
         _logger.LogDebug("Running handler for publish command...");
 
@@ -108,14 +108,29 @@ public class PublishCommandHandler : ICommandHandler
             cts.Cancel(); // Signal cancellation
         };
 
-        if (!string.IsNullOrWhiteSpace(filePath))
+        try
         {
-            var fileInfo = new FileInfo(Path.GetFullPath(filePath, Environment.CurrentDirectory));
-            await _publishService.PublishMessageFromFile(dest, fileInfo, burstCount, cts.Token);
+            if (!string.IsNullOrWhiteSpace(filePath))
+            {
+                var fileInfo = new FileInfo(Path.GetFullPath(filePath, Environment.CurrentDirectory));
+                await _publishService.PublishMessageFromFile(dest, fileInfo, burstCount, cts.Token);
+            }
+            else
+            {
+                await _publishService.PublishMessage(dest, [message], burstCount, cts.Token);
+            }
+
+            return 0;
         }
-        else
+        catch (OperationCanceledException)
         {
-            await _publishService.PublishMessage(dest, [message], burstCount, cts.Token);
+            // Cancellation already handled
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish message");
+            return 1; // Error exit code
         }
     }
 }
