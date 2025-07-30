@@ -10,8 +10,8 @@ namespace RmqCli.Services;
 
 public interface IPublishService
 {
-    Task PublishMessage(Destination dest, List<string> message, int burstCount = 1, CancellationToken cancellationToken = default);
-    Task PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default);
+    Task<int> PublishMessage(Destination dest, List<string> message, int burstCount = 1, CancellationToken cancellationToken = default);
+    Task<int> PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default);
 }
 
 public class PublishService : IPublishService
@@ -29,7 +29,15 @@ public class PublishService : IPublishService
         _output = outputService;
     }
 
-    public async Task PublishMessage(Destination dest, List<string> messages, int burstCount = 1, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Publishes a list of messages to the specified destination.
+    /// Supports burst publishing, where each message can be published multiple times.
+    /// </summary>
+    /// <param name="dest"></param>
+    /// <param name="messages"></param>
+    /// <param name="burstCount"></param>
+    /// <param name="cancellationToken"></param>
+    public async Task<int> PublishMessage(Destination dest, List<string> messages, int burstCount = 1, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "Initiating publish operation: exchange={Exchange}, routing-key={RoutingKey}, queue={Queue}, msg-count={MessageCount}, burst-count={BurstCount}",
@@ -39,10 +47,10 @@ public class PublishService : IPublishService
 
         var totalMessageCount = messages.Count * burstCount;
         var messageCountString = $"[orange1]{totalMessageCount}[/] message{(totalMessageCount > 1 ? "s" : string.Empty)}";
-        
+
         // Prepare the list to collect publish results
         var publishResults = new List<PublishResult>();
-        
+
         try
         {
             // Status output
@@ -78,6 +86,8 @@ public class PublishService : IPublishService
                 _output.ShowError($"Failed to publish to {GetDestinationString(dest)}: Exchange not found.");
                 _logger.LogWarning("Publishing failed with 404 shutdown reason: {Message}", ex.Message);
                 return;
+                return 1;
+                return 1;
             }
 
             _output.ShowError($"Failed to publish to {GetDestinationString(dest)}", ex.Message);
@@ -90,7 +100,7 @@ public class PublishService : IPublishService
             {
                 _output.ShowError($"Failed to publish to {GetDestinationString(dest)}: No route to destination.");
                 _logger.LogDebug(ex, "Caught publish exception due to 'basic.return'");
-                return;
+                return 1;
             }
 
             _output.ShowError($"Failed to publish to {GetDestinationString(dest)}", ex.Message);
@@ -117,9 +127,11 @@ public class PublishService : IPublishService
             await channel.CloseAsync(cancellationToken: cancellationToken);
             await _rabbitChannelFactory.CloseConnectionAsync();
         }
+
+        return 0;
     }
 
-    public async Task PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default)
+    public async Task<int> PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Reading message from file: {FilePath}", fileInfo.FullName);
         var messageBlob = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken);
@@ -139,7 +151,7 @@ public class PublishService : IPublishService
         _logger.LogDebug("Read {MessageCount} messages: file='{FilePath}', msg-delimiter='{MessageDelimiter}'", messages.Count, fileInfo.FullName,
             delimiterDisplay);
 
-        await PublishMessage(dest, messages, burstCount, cancellationToken);
+        return await PublishMessage(dest, messages, burstCount, cancellationToken);
     }
 
     private static string GetDestinationString(Destination dest, bool useColor = true)

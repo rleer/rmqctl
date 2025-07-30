@@ -59,12 +59,12 @@ public class PublishCommandHandler : ICommandHandler
             {
                 result.ErrorMessage = "Queue name cannot be empty.";
             }
-            
+
             if (result.GetValueForOption(exchangeOption) is { } exchange && string.IsNullOrEmpty(exchange))
             {
                 result.ErrorMessage = "Exchange name cannot be empty. Consider using the --queue option if you want to send messages directly to a queue.";
             }
-            
+
             if (result.GetValueForOption(routingKeyOption) is { } routingKey && string.IsNullOrEmpty(routingKey))
             {
                 result.ErrorMessage = "Routing key cannot be empty. Consider using the --queue option if you want to send messages directly to a queue.";
@@ -113,14 +113,10 @@ public class PublishCommandHandler : ICommandHandler
             if (!string.IsNullOrWhiteSpace(filePath))
             {
                 var fileInfo = new FileInfo(Path.GetFullPath(filePath, Environment.CurrentDirectory));
-                await _publishService.PublishMessageFromFile(dest, fileInfo, burstCount, cts.Token);
-            }
-            else
-            {
-                await _publishService.PublishMessage(dest, [message], burstCount, cts.Token);
+                return await _publishService.PublishMessageFromFile(dest, fileInfo, burstCount, cts.Token);
             }
 
-            return 0;
+            return await _publishService.PublishMessage(dest, [message], burstCount, cts.Token);
         }
         catch (OperationCanceledException)
         {
