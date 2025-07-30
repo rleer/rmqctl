@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
@@ -14,7 +15,7 @@ public interface IPublishService
     Task<int> PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default);
 }
 
-public class PublishService : IPublishService
+public partial class PublishService : IPublishService
 {
     private readonly IRabbitChannelFactory _rabbitChannelFactory;
     private readonly ILogger<PublishService> _logger;
@@ -81,17 +82,34 @@ public class PublishService : IPublishService
         }
         catch (AlreadyClosedException ex)
         {
-            if (ex.ShutdownReason?.ReplyCode == 404)
+            var errorText = ex.ShutdownReason?.ReplyText ?? ex.Message;
+
+            if (errorText.Contains("not found"))
             {
                 _output.ShowError($"Failed to publish to {GetDestinationString(dest)}: Exchange not found.");
-                _logger.LogWarning("Publishing failed with 404 shutdown reason: {Message}", ex.Message);
-                return;
+                _logger.LogDebug(ex, "Publishing failed with exception");
                 return 1;
+            }
+
+            if (errorText.Contains("max size"))
+            {
+                var regex = MaxMessageSizeRegex().Match(errorText);
+                var messageSize = regex.Success ? regex.Groups["message_size"].Value : null;
+                var maxSize = regex.Success ? regex.Groups["max_size"].Value : null;
+                var messageSizeValue = long.TryParse(messageSize, out var size) ? size : 0;
+                var maxSizeValue = long.TryParse(maxSize, out var max) ? max : 0;
+                var messageSizeString = messageSizeValue > 0 ? $"[orange1]{OutputUtilities.ToSizeString(messageSizeValue)}[/] " : string.Empty;
+                var maxSizeString = maxSizeValue > 0 ? $" [orange1]{OutputUtilities.ToSizeString(maxSizeValue)}[/]" : string.Empty;
+
+                _output.ShowError($"Failed to publish to {GetDestinationString(dest)}: " +
+                                  $"Message size {messageSizeString}is larger than configured max size{maxSizeString}.");
+                _logger.LogDebug(ex, "Publishing failed with exception");
                 return 1;
             }
 
             _output.ShowError($"Failed to publish to {GetDestinationString(dest)}", ex.Message);
-            _logger.LogWarning(ex, "Publishing failed. Channel was already closed, but not due to a 404 error.");
+            _logger.LogDebug("Publishing failed. Channel was already closed with shutdown reason: {ReplyText} ({ReplyCode})",
+                ex.ShutdownReason?.ReplyText, ex.ShutdownReason?.ReplyCode);
             throw;
         }
         catch (PublishException ex)
@@ -104,13 +122,14 @@ public class PublishService : IPublishService
             }
 
             _output.ShowError($"Failed to publish to {GetDestinationString(dest)}", ex.Message);
-            _logger.LogError(ex, "Publishing failed but not due to 'basic.return'");
+            _logger.LogDebug("Caught publish exception that is not due to 'basic.return'");
             throw;
         }
         catch (OperationCanceledException)
         {
+            _logger.LogDebug("Publishing operation canceled.");
             _output.ShowWarning("Publishing cancelled by user", addNewLine: true);
-            
+
             var publishCount = publishResults.Count;
             if (publishCount > 0)
             {
@@ -133,7 +152,7 @@ public class PublishService : IPublishService
 
     public async Task<int> PublishMessageFromFile(Destination dest, FileInfo fileInfo, int burstCount = 1, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Reading message from file: {FilePath}", fileInfo.FullName);
+        _logger.LogDebug("Reading message(s) from file: {FilePath}", fileInfo.FullName);
         var messageBlob = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken);
         var messages = messageBlob
             .Split(_fileConfig.MessageDelimiter)
@@ -148,7 +167,7 @@ public class PublishService : IPublishService
             '\t' => "\\t",
             _ => c.ToString()
         }));
-        _logger.LogDebug("Read {MessageCount} messages: file='{FilePath}', msg-delimiter='{MessageDelimiter}'", messages.Count, fileInfo.FullName,
+        _logger.LogDebug("Read {MessageCount} message(s): file='{FilePath}', msg-delimiter='{MessageDelimiter}'", messages.Count, fileInfo.FullName,
             delimiterDisplay);
 
         return await PublishMessage(dest, messages, burstCount, cancellationToken);
@@ -206,7 +225,7 @@ public class PublishService : IPublishService
     {
         return $"msg-{Guid.NewGuid().ToString("D")[..13]}";
     }
-    
+
     /// <summary>
     /// Generates a suffix for the message ID based on the message index and total messages.
     /// </summary>
@@ -218,4 +237,7 @@ public class PublishService : IPublishService
     {
         return "-" + $"{messageIndex + 1}".PadLeft(OutputUtilities.GetDigitCount(totalMessages), '0');
     }
+
+    [GeneratedRegex(@"message size (?<message_size>\d+).+max size (?<max_size>\d+)$")]
+    private static partial Regex MaxMessageSizeRegex();
 }
