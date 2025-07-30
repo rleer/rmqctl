@@ -106,7 +106,7 @@ public class RabbitChannelFactory : IRabbitChannelFactory
         {
             if (args.ReplyCode == 200)
             {
-                _logger.LogDebug("RabbitMQ connection shut down: {Reason} ({ReasonCode})", args.ReplyText, args.ReplyCode);
+                _logger.LogInformation("RabbitMQ connection shut down: {Reason} ({ReasonCode})", args.ReplyText, args.ReplyCode);
                 return Task.CompletedTask;
             }
             _logger.LogWarning("RabbitMQ connection shut down due to a failure: {Reason} ({ReasonCode})", args.ReplyText, args.ReplyCode);
