@@ -39,42 +39,8 @@ var builder = Host.CreateApplicationBuilder();
 // Clear default configuration sources and build custom configuration
 builder.Configuration.Sources.Clear();
 
-// Build configuration in priority order (lowest to highest priority):
-// 1. Default TOML config (fallback)
-// 2. System-wide TOML config
-// 3. User TOML config
-// 4. Custom TOML config (if specified via --config)
-// 5. Environment variables
-
-// Create default user config if it does not exist
-ConfigurationPathHelper.CreateDefaultUserConfigIfNotExists();
-
-// Add TOML configuration sources in priority order
-var systemConfigPath = ConfigurationPathHelper.GetSystemConfigFilePath();
-if (File.Exists(systemConfigPath))
-{
-    builder.Configuration.AddTomlConfig(systemConfigPath);
-}
-
-var userConfigPath = ConfigurationPathHelper.GetUserConfigFilePath();
-if (File.Exists(userConfigPath))
-{
-    builder.Configuration.AddTomlConfig(userConfigPath);
-}
-
-// Add custom configuration file if specified
-if (File.Exists(customConfigPath))
-{
-    builder.Configuration.AddTomlConfig(customConfigPath);
-}
-else if (!string.IsNullOrEmpty(customConfigPath))
-{
-    // TODO: User logger and add user-friendly error message
-    Console.Error.WriteLine("Configuration file not found. Using default configuration.");
-}
-
-// Add environment variables as the highest priority configuration source
-builder.Configuration.AddEnvironmentVariables("RMQCLI_");
+// Add custom configuration sources in priority order
+builder.Configuration.AddRmqConfig(customConfigPath);
 
 builder.Logging.ClearProviders();
 
