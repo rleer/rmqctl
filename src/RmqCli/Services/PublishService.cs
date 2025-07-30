@@ -5,7 +5,6 @@ using RabbitMQ.Client.Exceptions;
 using RmqCli.Configuration;
 using RmqCli.Models;
 using RmqCli.Utilities;
-using Spectre.Console;
 
 namespace RmqCli.Services;
 
@@ -20,12 +19,14 @@ public class PublishService : IPublishService
     private readonly IRabbitChannelFactory _rabbitChannelFactory;
     private readonly ILogger<PublishService> _logger;
     private readonly FileConfig _fileConfig;
+    private readonly ICliOutputService _output;
 
-    public PublishService(IRabbitChannelFactory rabbitChannelFactory, ILogger<PublishService> logger, FileConfig fileConfig)
+    public PublishService(IRabbitChannelFactory rabbitChannelFactory, ILogger<PublishService> logger, FileConfig fileConfig, ICliOutputService outputService)
     {
         _rabbitChannelFactory = rabbitChannelFactory;
         _logger = logger;
         _fileConfig = fileConfig;
+        _output = outputService;
     }
 
     public async Task PublishMessage(Destination dest, List<string> messages, int burstCount = 1, CancellationToken cancellationToken = default)
@@ -41,9 +42,9 @@ public class PublishService : IPublishService
             var messageCountString = $"[orange1]{totalMessageCount}[/] message{(totalMessageCount > 1 ? "s" : string.Empty)}";
 
             // Status output
-            AnsiConsole.MarkupLine($"\u26EF Publishing {messageCountString} to {GetDestinationString(dest)}...");
 
             var publishResults = new List<PublishResult>();
+            _output.ShowStatus($"Publishing {messageCountString} to {GetDestinationString(dest)}...");
 
             var messageBaseId = GetMessageId();
             for (var m = 0; m < messages.Count; m++)
@@ -63,51 +64,20 @@ public class PublishService : IPublishService
                 }
             }
 
-            // Success output
-            AnsiConsole.MarkupLine($"✓ Published {messageCountString} successfully");
+            _output.ShowSuccess($"Published {messageCountString} successfully");
 
-            // Result output
-            if (dest.Queue is not null)
-            {
-                AnsiConsole.MarkupLineInterpolated($"  Queue:       {dest.Queue}");
-            }
-            else if (dest is { Exchange: not null, RoutingKey: not null })
-            {
-                AnsiConsole.MarkupLineInterpolated($"  Exchange:    {dest.Exchange}");
-                AnsiConsole.MarkupLineInterpolated($"  Routing Key: {dest.RoutingKey}");
-            }
-
-            if (totalMessageCount > 1)
-            {
-                AnsiConsole.MarkupLineInterpolated($"  Message IDs: {publishResults[0].MessageId} → {publishResults[^1].MessageId}");
-
-                var avgSize = Math.Round(publishResults.Sum(m => m.MessageLength) / (double)totalMessageCount, 2);
-                var avgSizeString = OutputUtilities.ToSizeString(avgSize);
-                var totalSizeString = OutputUtilities.ToSizeString(publishResults.Sum(m => m.MessageLength));
-
-                AnsiConsole.MarkupLineInterpolated($"  Size:        {avgSizeString} avg. ({totalSizeString} total)");
-                AnsiConsole.MarkupLineInterpolated(
-                    $"  Time:        {publishResults[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff} → {publishResults[^1].Timestamp:yyyy-MM-dd HH:mm:ss.fff}");
-            }
-            else
-            {
-                AnsiConsole.MarkupLineInterpolated($"  Message ID:  {publishResults[0].MessageId}");
-                AnsiConsole.MarkupLineInterpolated($"  Size:        {publishResults[0].MessageSize}");
-                AnsiConsole.MarkupLineInterpolated($"  Time:        {publishResults[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff}");
-            }
+            _output.WritePublishResult(dest, publishResults);
         }
         catch (AlreadyClosedException ex)
         {
             if (ex.ShutdownReason?.ReplyCode == 404)
             {
-                // Error output
-                AnsiConsole.MarkupLine($"✗ Failed to publish to {GetDestinationString(dest)}: Exchange not found.");
+                _output.ShowError($"Failed to publish to {GetDestinationString(dest)}: Exchange not found.");
                 _logger.LogWarning("Publishing failed with 404 shutdown reason: {Message}", ex.Message);
                 return;
             }
 
-            // Error output
-            AnsiConsole.MarkupLine($"✗ Failed to publish to {GetDestinationString(dest)}: {TextFormatters.EscapeMarkup(ex.Message)}");
+            _output.ShowError($"Failed to publish to {GetDestinationString(dest)}", ex.Message);
             _logger.LogWarning(ex, "Publishing failed. Channel was already closed, but not due to a 404 error.");
             throw;
         }
@@ -115,15 +85,13 @@ public class PublishService : IPublishService
         {
             if (ex.IsReturn)
             {
-                // Error output
-                AnsiConsole.MarkupLine($"✗ Failed to publish to {GetDestinationString(dest)}: No route to destination.");
+                _output.ShowError($"Failed to publish to {GetDestinationString(dest)}: No route to destination.");
                 _logger.LogDebug(ex, "Caught publish exception due to 'basic.return'");
                 return;
             }
 
-            // Error output
-            AnsiConsole.MarkupLine($"✗ Failed to publish to {GetDestinationString(dest)}: {TextFormatters.EscapeMarkup(ex.Message)}");
-            _logger.LogError(ex, "Publishing failed but no due to 'basic.return'");
+            _output.ShowError($"Failed to publish to {GetDestinationString(dest)}", ex.Message);
+            _logger.LogError(ex, "Publishing failed but not due to 'basic.return'");
             throw;
         }
     }

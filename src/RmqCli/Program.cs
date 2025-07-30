@@ -79,6 +79,7 @@ builder.Services.AddSingleton(cliConfig);
 builder.Services.AddSingleton<IRabbitChannelFactory, RabbitChannelFactory>();
 builder.Services.AddSingleton<IPublishService, PublishService>();
 builder.Services.AddSingleton<IConsumeService, ConsumeService>();
+builder.Services.AddSingleton<ICliOutputService, CliOutputService>();
 
 // Register message formatters
 builder.Services.AddSingleton<IMessageFormatter, TextMessageFormatter>();
