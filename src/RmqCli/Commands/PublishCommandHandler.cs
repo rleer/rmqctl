@@ -18,9 +18,32 @@ public class PublishCommandHandler : ICommandHandler
 
     public void Configure(RootCommand rootCommand)
     {
-        _logger.LogDebug("Configuring publish command...");
+            _logger.LogDebug("Configuring publish command");
 
-        var publishCommand = new Command("publish", "Publish message to a queue");
+        var description = """
+                          Publish messages to a queue or via exchange and routing-key.
+                          
+                          Messages can be specified 
+                            - directly via the --message option
+                            - read from a file using the --from-file option
+                            - piped from standard input (STDIN)
+
+                          At the moment, only the message body is supported for publishing. For each message, the following properties are set:
+                            - Message ID: auto-generated (incremental)
+                            - TimeStamp: current time
+                            - Body: the message body specified
+                          
+                          Example usage:
+                            rmq publish --queue my-queue --message "Hello, World!"
+                            rmq publish --exchange my-exchange --routing-key my-routing-key --message "Hello, World!"
+                            rmq publish --from-file message.txt
+                            echo "Hello, World!" | rmq publish --queue my-queue
+                          
+                          Note that messages are sent with the mandatory flag set to true, meaning that if the message cannot be routed to any queue, 
+                          it will be returned to the sender.
+                          """;
+        
+        var publishCommand = new Command("publish", description);
 
         var queueOption = new Option<string>("--queue", "Queue name to send message to");
         queueOption.AddAlias("-q");
