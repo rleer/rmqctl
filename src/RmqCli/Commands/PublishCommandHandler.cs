@@ -20,46 +20,51 @@ public class PublishCommandHandler : ICommandHandler
     {
             _logger.LogDebug("Configuring publish command");
 
-        var description = """
-                          Publish messages to a queue or via exchange and routing-key.
-                          
-                          Messages can be specified 
-                            - directly via the --message option
-                            - read from a file using the --from-file option
-                            - piped from standard input (STDIN)
+        const string description = """
+                                   Publish messages to a queue or via exchange and routing-key.
 
-                          At the moment, only the message body is supported for publishing. For each message, the following properties are set:
-                            - Message ID: auto-generated (incremental)
-                            - TimeStamp: current time
-                            - Body: the message body specified
-                          
-                          Example usage:
-                            rmq publish --queue my-queue --message "Hello, World!"
-                            rmq publish --exchange my-exchange --routing-key my-routing-key --message "Hello, World!"
-                            rmq publish --from-file message.txt
-                            echo "Hello, World!" | rmq publish --queue my-queue
-                          
-                          Note that messages are sent with the mandatory flag set to true, meaning that if the message cannot be routed to any queue, 
-                          it will be returned to the sender.
-                          """;
+                                   Messages can be specified 
+                                     - directly via the --message option
+                                     - read from a file using the --from-file option
+                                     - piped from standard input (STDIN)
+                                   
+                                   Multiple messages can be sent from a file or STDIN. Messages will be separated by the configured 
+                                   message delimiter (see config). Default delimiter is the OS specific newline character.
+
+                                   At the moment, only the message body is supported for publishing. 
+                                   For each message, the following RabbitMQ properties are set:
+                                     - message_id: auto-generated (incremental)
+                                     - timestamp: UTC timestamp of when the message was published 
+                                                  (UTC because RabbitMQ uses Unix timestamp in seconds as the underlying format)
+
+                                   Example usage:
+                                     rmq publish --queue my-queue --message "Hello, World!"
+                                     rmq publish --exchange my-exchange --routing-key my-routing-key --message "Hello, World!"
+                                     rmq publish --from-file message.txt
+                                     echo "Hello, World!" | rmq publish --queue my-queue
+                                     rmq publish --queue my-queue --burst 10 --message "Burst message" > output.txt
+
+                                   Note that messages are sent with the mandatory flag set to true, meaning that if the message 
+                                   cannot be routed to any queue, it will be returned to the sender.
+                                   """;
         
         var publishCommand = new Command("publish", description);
 
-        var queueOption = new Option<string>("--queue", "Queue name to send message to");
+        var queueOption = new Option<string>("--queue", "Queue name to send message to.");
         queueOption.AddAlias("-q");
 
-        var exchangeOption = new Option<string>("--exchange", "Exchange name to send message to");
+        var exchangeOption = new Option<string>("--exchange", "Exchange name to send message to.");
         exchangeOption.AddAlias("-e");
 
-        var routingKeyOption = new Option<string>("--routing-key", "Routing key to send message to");
+        var routingKeyOption = new Option<string>("--routing-key", "Routing key to send message to.");
         routingKeyOption.AddAlias("-r");
 
-        var messageOption = new Option<string>("--message", "Message to send");
+        var messageOption = new Option<string>("--message", "Message body to send.");
         messageOption.AddAlias("-m");
 
-        var fromFileOption = new Option<string>("--from-file", "Path to a file that contains the message body to send");
+        var fromFileOption = new Option<string>("--from-file", "Path to a file that contains one or more message bodies to send.");
 
-        var burstOption = new Option<int>("--burst", "Number of messages to send in burst mode");
+        var burstOption = new Option<int>("--burst", "Send each message multiple times (burst mode). Default is no burst.");
         burstOption.AddAlias("-b");
         burstOption.SetDefaultValue(1);
 

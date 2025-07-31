@@ -35,8 +35,7 @@ public class ConsumeCommandHandler : ICommandHandler
         countOption.AddAlias("-c");
         countOption.SetDefaultValue(-1);
 
-        var outputFileOption = new Option<string>("--file", "Output file to write messages to");
-        outputFileOption.AddAlias("-f");
+        var outputFileOption = new Option<string>("--to-file", "Output file to write messages to. Or just pipe/redirect output to a file.");
 
         var outputFormatOption = new Option<OutputFormat>("--output", "Output format. One of: text, json or yaml.");
         outputFormatOption.AddAlias("-o");
