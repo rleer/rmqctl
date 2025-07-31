@@ -6,7 +6,6 @@ using RabbitMQ.Client.Exceptions;
 using RmqCli.Configuration;
 using RmqCli.Models;
 using RmqCli.Utilities;
-using Spectre.Console;
 
 namespace RmqCli.Services;
 
@@ -59,41 +58,45 @@ public partial class PublishService : IPublishService
             // Status output
             _output.ShowStatus($"Publishing {messageCountString} to {GetDestinationString(dest)}...");
 
-            var messageBaseId = GetMessageId();
+            // var messageBaseId = GetMessageId();
 
-            await AnsiConsole.Progress()
-                .AutoClear(true)
-                .HideCompleted(true)
-                .Columns(new ProgressColumn[]
-                {
-                    new SpinnerColumn(Spinner.Known.Dots),
-                    new TaskDescriptionColumn(),
-                    new ProgressBarColumn(),
-                    new PercentageColumn()
-                })
-                .StartAsync(async ctx =>
-            {
-                var progress = ctx.AddTask("Publishing messages", maxValue: totalMessageCount);
-                
-                for (var m = 0; m < messages.Count; m++)
-                {
-                    var messageIdSuffix = GetMessageIdSuffix(m, messages.Count);
-                    for (var i = 0; i < burstCount; i++)
-                    {
-                        await Task.Delay(1000);
-                        var burstSuffix = burstCount > 1 ? GetMessageIdSuffix(i, burstCount) : string.Empty;
-                        var result = await Publish(
-                            channel: channel,
-                            message: messages[m],
-                            messageId: $"{messageBaseId}{messageIdSuffix}{burstSuffix}",
-                            exchange: dest.Exchange ?? string.Empty,
-                            routingKey: dest.Queue ?? dest.RoutingKey ?? string.Empty,
-                            cancellationToken: cancellationToken);
-                        publishResults.Add(result);
-                        progress.Increment(1); 
-                    }
-                }
-            });
+            // publishResults = await _output.ExecuteWithProgress(
+            //     description: "Publishing messages",
+            //     maxValue: totalMessageCount,
+            //     workload: async (progress) =>
+            //     {
+            //         var results = new List<PublishResult>();
+            //         var currentProgress = 0;
+            //
+            //         for (var m = 0; m < messages.Count; m++)
+            //         {
+            //             var messageIdSuffix = GetMessageIdSuffix(m, messages.Count);
+            //             for (var i = 0; i < burstCount; i++)
+            //             {
+            //                 // await Task.Delay(1000);
+            //                 var burstSuffix = burstCount > 1 ? GetMessageIdSuffix(i, burstCount) : string.Empty;
+            //                 var result = await Publish(
+            //                     channel: channel,
+            //                     message: messages[m],
+            //                     messageId: $"{messageBaseId}{messageIdSuffix}{burstSuffix}",
+            //                     exchange: dest.Exchange ?? string.Empty,
+            //                     routingKey: dest.Queue ?? dest.RoutingKey ?? string.Empty,
+            //                     cancellationToken: cancellationToken);
+            //                 results.Add(result);
+            //                 
+            //                 currentProgress++;
+            //                 progress?.Report(currentProgress);
+            //             }
+            //         }
+            //
+            //         return results;
+            //     });
+
+            publishResults = await _output.ExecuteWithProgress(
+                description: "Publishing messages",
+                maxValue: totalMessageCount,
+                workload: progress =>
+                    PublishCore(messages, channel, dest, progress, burstCount, cancellationToken));
 
             _output.ShowSuccess($"Published {messageCountString} successfully");
 
@@ -173,7 +176,7 @@ public partial class PublishService : IPublishService
     {
         _logger.LogDebug("Reading messages from file: {FilePath}", fileInfo.FullName);
         var messageBlob = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken);
-        
+
         var (messages, delimiterDisplay) = SplitMessages(messageBlob);
 
         _logger.LogDebug("Read {MessageCount} messages: source='{FilePath}', msg-delimiter='{MessageDelimiter}'", messages.Count, fileInfo.FullName,
@@ -186,13 +189,60 @@ public partial class PublishService : IPublishService
     {
         _logger.LogDebug("Reading messages from standard input (STDIN)");
         var messageBlob = await Console.In.ReadToEndAsync(cancellationToken);
-        
+
         var (messages, delimiterDisplay) = SplitMessages(messageBlob);
-        
+
         _logger.LogDebug("Read {MessageCount} messages: source:'STDIN', msg-delimiter='{MessageDelimiter}'", messages.Count,
-            delimiterDisplay); 
-        
+            delimiterDisplay);
+
         return await PublishMessage(dest, messages, burstCount, cancellationToken);
+    }
+
+    private async Task<List<PublishResult>> PublishCore(
+        List<string> messages,
+        IChannel channel,
+        Destination dest,
+        IProgress<int>? progress = null,
+        int burstCount = 1,
+        CancellationToken cancellationToken = default)
+    {
+        var messageBaseId = GetMessageId();
+        var results = new List<PublishResult>();
+        var currentProgress = 0;
+
+        for (var m = 0; m < messages.Count; m++)
+        {
+            var body = Encoding.UTF8.GetBytes(messages[m]);
+            var messageIdSuffix = GetMessageIdSuffix(m, messages.Count);
+            for (var i = 0; i < burstCount; i++)
+            {
+                // await Task.Delay(1000);
+                var burstSuffix = burstCount > 1 ? GetMessageIdSuffix(i, burstCount) : string.Empty;
+                var messageId = $"{messageBaseId}{messageIdSuffix}{burstSuffix}";
+                var props = new BasicProperties
+                {
+                    MessageId = messageId,
+                    Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+                };
+
+                await channel.BasicPublishAsync(
+                    exchange: dest.Exchange ?? string.Empty,
+                    routingKey: dest.Queue ?? dest.RoutingKey ?? string.Empty,
+                    mandatory: true,
+                    basicProperties: props,
+                    body: body,
+                    cancellationToken: cancellationToken);
+    
+                // Collect the result
+                results.Add(new PublishResult(props.MessageId, body.LongLength, props.Timestamp));
+                
+                // Report progress
+                currentProgress++;
+                progress?.Report(currentProgress);
+            }
+        }
+
+        return results;
     }
 
     private (List<string> messags, string delimiterDisplay) SplitMessages(string messageBlob)
@@ -202,7 +252,7 @@ public partial class PublishService : IPublishService
             .Select(m => m.Trim())
             .Where(m => !string.IsNullOrWhiteSpace(m))
             .ToList();
-        
+
         var delimiterDisplay = string.Join("", _fileConfig.MessageDelimiter.Select(c => c switch
         {
             '\r' => "\\r",
@@ -230,31 +280,6 @@ public partial class PublishService : IPublishService
         return string.Empty;
     }
 
-    private static async Task<PublishResult> Publish(
-        IChannel channel,
-        string message,
-        string messageId,
-        string exchange,
-        string routingKey,
-        CancellationToken cancellationToken = default)
-    {
-        var body = Encoding.UTF8.GetBytes(message);
-        var props = new BasicProperties
-        {
-            MessageId = messageId,
-            Timestamp = new AmqpTimestamp(DateTimeOffset.Now.ToUnixTimeSeconds())
-        };
-
-        await channel.BasicPublishAsync(
-            exchange: exchange,
-            routingKey: routingKey,
-            mandatory: true,
-            basicProperties: props,
-            body: body,
-            cancellationToken: cancellationToken);
-
-        return new PublishResult(props.MessageId, body.LongLength, props.Timestamp);
-    }
 
     /// <summary>
     /// Generates a unique message ID.

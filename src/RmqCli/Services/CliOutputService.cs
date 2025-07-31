@@ -13,6 +13,7 @@ public interface ICliOutputService
     void ShowError(string message, string? exception = null);
 
     void WritePublishResult(Destination dest, List<PublishResult> results, OutputFormat format = OutputFormat.Text);
+    Task<T> ExecuteWithProgress<T>(string description, int maxValue, Func<IProgress<int>, Task<T>> workload);
     bool IsInteractive { get; }
 }
 
@@ -109,6 +110,36 @@ public class CliOutputService : ICliOutputService
             AnsiConsole.WriteLine();
 
         AnsiConsole.MarkupLine(outputMessage);
+    }
+
+    public async Task<T> ExecuteWithProgress<T>(string description, int maxValue, Func<IProgress<int>, Task<T>> workload)
+    {
+        // TODO: Make progress bar threshold for interactive mode configurable
+        if (!IsInteractive || (IsInteractive && maxValue < 3000))
+        {
+            // For non-interactive mode, provide a no-op progress reporter
+            return await workload(new Progress<int>());
+        }
+
+        return await AnsiConsole.Progress()
+            .AutoClear(true)
+            .HideCompleted(true)
+            .Columns(
+                new SpinnerColumn(Spinner.Known.Dots), 
+                new TaskDescriptionColumn(), 
+                new ProgressBarColumn(), 
+                new PercentageColumn())
+            .StartAsync(async ctx =>
+            {
+                var progressTask = ctx.AddTask(description, maxValue: maxValue);
+
+                var progress = new Progress<int>(value =>
+                {
+                    progressTask.Value = value;
+                });
+
+                return await workload(progress);
+            });
     }
 
     private static string EscapeMarkup(string text)
