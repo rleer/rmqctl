@@ -71,7 +71,7 @@ public class CliOutputService : ICliOutputService
             var avgSize = Math.Round(results.Sum(m => m.MessageLength) / (double)results.Count, 2);
             var avgSizeString = ToSizeString(avgSize);
             var totalSizeString = ToSizeString(results.Sum(m => m.MessageLength));
-            var timeString = $"{results[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff} → {results[^1].Timestamp:yyyy-MM-dd HH:mm:ss.fff}";
+            var timeString = $"{results[0].Timestamp:yyyy-MM-dd HH:mm:ss} UTC → {results[^1].Timestamp:yyyy-MM-dd HH:mm:ss} UTC";
 
             AnsiConsole.MarkupLineInterpolated($"  Message IDs: {results[0].MessageId} → {results[^1].MessageId}");
             AnsiConsole.MarkupLineInterpolated($"  Size:        {avgSizeString} avg. ({totalSizeString} total)");
@@ -81,7 +81,7 @@ public class CliOutputService : ICliOutputService
         {
             AnsiConsole.MarkupLineInterpolated($"  Message ID:  {results[0].MessageId}");
             AnsiConsole.MarkupLineInterpolated($"  Size:        {results[0].MessageSize}");
-            AnsiConsole.MarkupLineInterpolated($"  Time:        {results[0].Timestamp:yyyy-MM-dd HH:mm:ss.fff}");
+            AnsiConsole.MarkupLineInterpolated($"  Timestamp:   {results[0].Timestamp:yyyy-MM-dd HH:mm:ss} UTC");
         }
     }
 
