@@ -10,5 +10,5 @@ public interface IMessageWriter
         Channel<(ulong deliveryTag, AckModes ackMode)> ackChannel,
         AckModes ackMode);
 
-    IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Text);
+    IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Plain);
 }

@@ -6,7 +6,7 @@ namespace RmqCli.MessageWriter;
 
 public interface IMessageWriterFactory
 {
-    IMessageWriter CreateWriter(FileInfo? outputFileInfo, int messageCount, OutputFormat outputFormat = OutputFormat.Text);
+    IMessageWriter CreateWriter(FileInfo? outputFileInfo, int messageCount, OutputFormat outputFormat = OutputFormat.Plain);
 }
 
 public class MessageWriterFactory : IMessageWriterFactory
@@ -20,7 +20,7 @@ public class MessageWriterFactory : IMessageWriterFactory
         _fileConfig = fileConfig;
     }
 
-    public IMessageWriter CreateWriter(FileInfo? outputFileInfo, int messageCount, OutputFormat outputFormat = OutputFormat.Text)
+    public IMessageWriter CreateWriter(FileInfo? outputFileInfo, int messageCount, OutputFormat outputFormat = OutputFormat.Plain)
     {
         if (outputFileInfo is null)
         {

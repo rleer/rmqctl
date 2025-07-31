@@ -37,9 +37,9 @@ public class ConsumeCommandHandler : ICommandHandler
 
         var outputFileOption = new Option<string>("--to-file", "Output file to write messages to. Or just pipe/redirect output to a file.");
 
-        var outputFormatOption = new Option<OutputFormat>("--output", "Output format. One of: text, json or yaml.");
+        var outputFormatOption = new Option<OutputFormat>("--output", "Output format. One of: plain, table or json.");
         outputFormatOption.AddAlias("-o");
-        outputFormatOption.SetDefaultValue(OutputFormat.Text);
+        outputFormatOption.SetDefaultValue(OutputFormat.Plain);
         
         consumeCommand.AddOption(queueOption);
         consumeCommand.AddOption(ackModeOption);

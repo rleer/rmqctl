@@ -13,7 +13,7 @@ public class SingleFileMessageWriter : IMessageWriter
     private readonly FileConfig _fileConfig;
     private readonly IMessageFormatterFactory _formatterFactory;
     private FileInfo? _outputFileInfo;
-    private OutputFormat _outputFormat = OutputFormat.Text;
+    private OutputFormat _outputFormat = OutputFormat.Plain;
     private IMessageFormatter? _formatter;
 
     public SingleFileMessageWriter(ILogger<SingleFileMessageWriter> logger, FileConfig fileConfig, IMessageFormatterFactory formatterFactory)
@@ -23,7 +23,7 @@ public class SingleFileMessageWriter : IMessageWriter
         _formatterFactory = formatterFactory;
     }
 
-    public IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Text)
+    public IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Plain)
     {
         _outputFileInfo = outputFileInfo;
         _outputFormat = outputFormat;
@@ -69,7 +69,7 @@ public class SingleFileMessageWriter : IMessageWriter
                     {
                         await writer.WriteLineAsync(","); // Add comma for JSON formatting
                     }
-                    else if (_outputFormat is OutputFormat.Text)
+                    else if (_outputFormat is OutputFormat.Plain)
                     {
                         await writer.WriteLineAsync(_fileConfig.MessageDelimiter); // Add delimiter for text format
                     }

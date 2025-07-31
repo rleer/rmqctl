@@ -17,7 +17,7 @@ public class ConsoleMessageWriter : IMessageWriter
         _formatterFactory = formatterFactory;
     }
     
-    public IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Text)
+    public IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Plain)
     {
         _formatter = _formatterFactory.CreateFormatter(outputFormat);
         return this;
