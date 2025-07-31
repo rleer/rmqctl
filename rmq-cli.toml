@@ -1,4 +1,5 @@
-# rmqctl Configuration File
+# rmq Configuration File
+# This file contains default settings for the rmq CLI tool
 [RabbitMq]
 Host = "localhost"
 Port = 5672
@@ -7,7 +8,8 @@ User = "guest"
 Password = "guest"
 Exchange = "amq.direct"
 ClientName = "rabbit-cli-tool"
-PrefetchCount = 200
 
 [FileConfig]
 MessagesPerFile = 10000
+## Default value is the OS specific newline character
+# MessageDelimiter="\n"

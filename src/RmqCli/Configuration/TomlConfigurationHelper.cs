@@ -1,6 +1,6 @@
 namespace RmqCli.Configuration;
 
-public class ConfigurationPathHelper
+public class TomlConfigurationHelper
 {
     private static string GetUserConfigDirectory()
     {
@@ -65,6 +65,8 @@ public class ConfigurationPathHelper
 
                [FileConfig]
                MessagesPerFile = 10000
+               ## Default value is the OS specific newline character
+               # MessageDelimiter="\n"
                """;
     }
 }

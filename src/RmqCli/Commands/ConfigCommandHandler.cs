@@ -7,7 +7,23 @@ public class ConfigCommandHandler : ICommandHandler
 {
     public void Configure(RootCommand rootCommand)
     {
-        var configCommand = new Command("config", "Manage configuration files");
+        const string description = """
+                                   Manage configuration files for the rmq CLI tool.
+
+                                   This command allows you to view, initialize, edit, and reset the configuration files used by RmqCli.
+
+                                   On the first run, a default configuration file is created in the user's home directory.
+                                   The configuration file is in TOML format. All available options are documented in the default configuration file.
+
+                                   Example usage:
+                                     rmq config show
+                                     rmq config init
+                                     rmq config path
+                                     rmq config edit
+                                     rmq config reset
+                                   """;
+        
+        var configCommand = new Command("config", description);
 
         // config show - shows the current configuration file path and contents
         var showCommand = new Command("show", "Show current configuration");
@@ -39,8 +55,8 @@ public class ConfigCommandHandler : ICommandHandler
 
     private static void ShowConfig()
     {
-        var userConfigPath = ConfigurationPathHelper.GetUserConfigFilePath();
-        var systemConfigPath = ConfigurationPathHelper.GetSystemConfigFilePath();
+        var userConfigPath = TomlConfigurationHelper.GetUserConfigFilePath();
+        var systemConfigPath = TomlConfigurationHelper.GetSystemConfigFilePath();
         var configFound = false;
 
         if (File.Exists(userConfigPath))
@@ -69,18 +85,18 @@ public class ConfigCommandHandler : ICommandHandler
 
     private static void InitConfig()
     {
-        ConfigurationPathHelper.CreateDefaultUserConfigIfNotExists();
+        TomlConfigurationHelper.CreateDefaultUserConfigIfNotExists();
     }
 
     private static void ShowConfigPath()
     {
-        if (File.Exists(ConfigurationPathHelper.GetUserConfigFilePath()))
+        if (File.Exists(TomlConfigurationHelper.GetUserConfigFilePath()))
         {
-            Console.WriteLine($"User configuration file path: {ConfigurationPathHelper.GetUserConfigFilePath()}");
+            Console.WriteLine($"User configuration file path: {TomlConfigurationHelper.GetUserConfigFilePath()}");
         }
-        else if (File.Exists(ConfigurationPathHelper.GetSystemConfigFilePath()))
+        else if (File.Exists(TomlConfigurationHelper.GetSystemConfigFilePath()))
         {
-            Console.WriteLine($"System-wide configuration file path: {ConfigurationPathHelper.GetSystemConfigFilePath()}");
+            Console.WriteLine($"System-wide configuration file path: {TomlConfigurationHelper.GetSystemConfigFilePath()}");
         }
         else
         {
@@ -90,7 +106,7 @@ public class ConfigCommandHandler : ICommandHandler
 
     private static void EditConfig()
     {
-        var configPath = ConfigurationPathHelper.GetUserConfigFilePath();
+        var configPath = TomlConfigurationHelper.GetUserConfigFilePath();
         if (!File.Exists(configPath))
         {
             Console.Error.WriteLine("Configuration file does not exist. Run 'config init' to create a default configuration file.");
@@ -116,7 +132,7 @@ public class ConfigCommandHandler : ICommandHandler
 
     private static void ResetConfig()
     {
-        var configPath = ConfigurationPathHelper.GetUserConfigFilePath();
+        var configPath = TomlConfigurationHelper.GetUserConfigFilePath();
         if (File.Exists(configPath))
         {
             try
@@ -129,7 +145,7 @@ public class ConfigCommandHandler : ICommandHandler
             }
         }
         
-        ConfigurationPathHelper.CreateDefaultUserConfigIfNotExists();
+        TomlConfigurationHelper.CreateDefaultUserConfigIfNotExists();
         Console.WriteLine($"Configuration reset to defaults: {configPath}");
     }
 }

@@ -13,16 +13,16 @@ public static class ConfigurationExtensions
         // 4. Custom TOML config (if specified via --config)
         // 5. Environment variables
         // Create default user config if it does not exist
-        ConfigurationPathHelper.CreateDefaultUserConfigIfNotExists();
+        TomlConfigurationHelper.CreateDefaultUserConfigIfNotExists();
 
         // Add TOML configuration sources in priority order
-        var systemConfigPath = ConfigurationPathHelper.GetSystemConfigFilePath();
+        var systemConfigPath = TomlConfigurationHelper.GetSystemConfigFilePath();
         if (File.Exists(systemConfigPath))
         {
             builder.AddTomlConfig(systemConfigPath);
         }
 
-        var userConfigPath = ConfigurationPathHelper.GetUserConfigFilePath();
+        var userConfigPath = TomlConfigurationHelper.GetUserConfigFilePath();
         if (File.Exists(userConfigPath))
         {
             builder.AddTomlConfig(userConfigPath);
