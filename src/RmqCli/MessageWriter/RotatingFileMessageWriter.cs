@@ -13,7 +13,7 @@ public class RotatingFileMessageWriter : IMessageWriter
     private readonly FileConfig _fileConfig;
     private readonly IMessageFormatterFactory _formatterFactory;
     private FileInfo? _outputFileInfo;
-    private OutputFormat _outputFormat = OutputFormat.Text;
+    private OutputFormat _outputFormat = OutputFormat.Plain;
     private IMessageFormatter? _formatter;
 
     public RotatingFileMessageWriter(ILogger<RotatingFileMessageWriter> logger, FileConfig fileConfig, IMessageFormatterFactory formatterFactory)
@@ -23,7 +23,7 @@ public class RotatingFileMessageWriter : IMessageWriter
         _formatterFactory = formatterFactory;
     }
 
-    public IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Text)
+    public IMessageWriter Initialize(FileInfo? outputFileInfo, OutputFormat outputFormat = OutputFormat.Plain)
     {
         _outputFileInfo = outputFileInfo;
         _outputFormat = outputFormat;
@@ -91,7 +91,7 @@ public class RotatingFileMessageWriter : IMessageWriter
                     {
                         await writer.WriteLineAsync(","); // Add comma for JSON formatting
                     }
-                    else if (_outputFormat is OutputFormat.Text)
+                    else if (_outputFormat is OutputFormat.Plain)
                     {
                         await writer.WriteLineAsync(_fileConfig.MessageDelimiter); // Add delimiter for text format
                     }

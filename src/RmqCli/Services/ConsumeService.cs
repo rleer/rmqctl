@@ -9,7 +9,7 @@ namespace RmqCli.Services;
 
 public interface IConsumeService
 {
-    Task ConsumeMessages(string queue, AckModes ackMode, FileInfo? outputFileInfo = null, int messageCount = -1, OutputFormat outputFormat = OutputFormat.Text, CancellationToken cancellationToken = default);
+    Task ConsumeMessages(string queue, AckModes ackMode, FileInfo? outputFileInfo = null, int messageCount = -1, OutputFormat outputFormat = OutputFormat.Plain, CancellationToken cancellationToken = default);
 }
 
 public class ConsumeService : IConsumeService
@@ -30,7 +30,7 @@ public class ConsumeService : IConsumeService
         AckModes ackMode,
         FileInfo? outputFileInfo,
         int messageCount = -1,
-        OutputFormat outputFormat = OutputFormat.Text,
+        OutputFormat outputFormat = OutputFormat.Plain,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("[*] Starting consuming from '{Queue}' queue in '{AckMode}' {StoppingCondition}",

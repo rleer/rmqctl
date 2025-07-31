@@ -3,15 +3,23 @@ namespace RmqCli.Models;
 public enum OutputFormat
 {
     /// <summary>
-    /// Output messages in plain text format.
+    /// Output results in plain text format.
     /// </summary>
-    Text,
+    Plain,
+    
     /// <summary>
-    /// Output messages in JSON format.
+    /// Output results in a table format.
+    /// </summary>
+    Table,
+
+    /// <summary>
+    /// Output results in JSON format.
     /// </summary>
     Json,
+    
     /// <summary>
-    /// Output messages in YAML format.
+    /// To be implemented: Output results in JSON based on a JSONPath expression.
+    /// This format allows for filtering and selecting specific parts of the JSON output.
     /// </summary>
-    Yaml
+    JsonPath
 }

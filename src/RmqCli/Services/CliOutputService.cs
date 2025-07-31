@@ -12,7 +12,7 @@ public interface ICliOutputService
     void ShowWarning(string message, bool addNewLine = false);
     void ShowError(string message, string? exception = null);
 
-    void WritePublishResult(Destination dest, List<PublishResult> results, OutputFormat format = OutputFormat.Text);
+    void WritePublishResult(Destination dest, List<PublishResult> results, OutputFormat format = OutputFormat.Plain);
     Task<T> ExecuteWithProgress<T>(string description, int maxValue, Func<IProgress<int>, Task<T>> workload);
     bool IsInteractive { get; }
 }
@@ -50,8 +50,7 @@ public class CliOutputService : ICliOutputService
         AnsiConsole.MarkupLine($"{SuccessSymbol} {message}");
     }
 
-
-    public void WritePublishResult(Destination dest, List<PublishResult> results, OutputFormat format = OutputFormat.Text)
+    public void WritePublishResult(Destination dest, List<PublishResult> results, OutputFormat format = OutputFormat.Plain)
     {
         if (_cliConfig.JsonOutput)
             return;
